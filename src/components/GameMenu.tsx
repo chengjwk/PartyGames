@@ -6,98 +6,51 @@ interface GameMenuProps {
   send: (msg: ClientMessage) => void;
 }
 
-// Floating top-left menu — pause/resume during a round, plus a "stop game"
-// option (with confirm) that returns the room to the lobby. Available on
-// every screen while a game is in progress.
+// Two floating buttons in the top-left: Pause/Resume (only during play) and
+// Stop (always in-game). Stop opens a confirm dialog before resetting.
 export default function GameMenu({ state, send }: GameMenuProps) {
-  const [open, setOpen] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
 
-  // Hide entirely in the lobby — nothing to pause or stop.
   if (state.phase === "LOBBY") return null;
-
   const canPause = state.phase === "ROUND_PLAYING";
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Game menu"
-        title="Game menu"
+      <div
         style={{
           position: "fixed",
           top: 12,
           left: 12,
           zIndex: 10,
-          background: "var(--bg-elev)",
-          color: "var(--fg)",
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          padding: "6px 10px",
-          fontSize: 18,
-          opacity: 0.7,
-          cursor: "pointer",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
+          display: "flex",
+          gap: 8,
         }}
       >
-        <DotsIcon />
-      </button>
-
-      {open && (
-        <div
-          onClick={() => setOpen(false)}
+        {canPause && (
+          <button
+            onClick={() => send({ type: "togglePause" })}
+            aria-label={state.paused ? "Resume game" : "Pause game"}
+            title={state.paused ? "Resume" : "Pause"}
+            style={controlButtonStyle}
+          >
+            {state.paused ? <PlayIcon /> : <PauseIcon />}
+            <span style={labelStyle}>{state.paused ? "Resume" : "Pause"}</span>
+          </button>
+        )}
+        <button
+          onClick={() => setConfirmStop(true)}
+          aria-label="Stop game"
+          title="Stop game"
           style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 15, 20, 0.6)",
-            zIndex: 70,
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "flex-start",
-            padding: "60px 12px",
+            ...controlButtonStyle,
+            color: "#ff8e8e",
+            borderColor: "#5a2a2a",
           }}
         >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: "var(--bg)",
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: 8,
-              minWidth: 200,
-              display: "flex",
-              flexDirection: "column",
-              gap: 6,
-            }}
-          >
-            {canPause && (
-              <button
-                onClick={() => {
-                  send({ type: "togglePause" });
-                  setOpen(false);
-                }}
-                style={menuItemStyle}
-              >
-                {state.paused ? "▶  Resume" : "⏸  Pause"}
-              </button>
-            )}
-            <button
-              onClick={() => {
-                setConfirmStop(true);
-                setOpen(false);
-              }}
-              style={{ ...menuItemStyle, color: "#ff7e7e" }}
-            >
-              ⏹  Stop game
-            </button>
-            <button onClick={() => setOpen(false)} style={cancelStyle}>
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+          <StopIcon />
+          <span style={labelStyle}>Stop</span>
+        </button>
+      </div>
 
       {confirmStop && (
         <ConfirmStop
@@ -182,33 +135,46 @@ function ConfirmStop({
   );
 }
 
-function DotsIcon() {
+const controlButtonStyle: React.CSSProperties = {
+  background: "var(--bg-elev)",
+  color: "var(--fg)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  padding: "8px 12px",
+  fontSize: 15,
+  fontWeight: 600,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  cursor: "pointer",
+  opacity: 0.95,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 14,
+};
+
+function PauseIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <circle cx="6" cy="12" r="2" />
-      <circle cx="12" cy="12" r="2" />
-      <circle cx="18" cy="12" r="2" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
     </svg>
   );
 }
 
-const menuItemStyle: React.CSSProperties = {
-  background: "var(--bg-elev)",
-  color: "var(--fg)",
-  border: "none",
-  borderRadius: 8,
-  padding: "12px 14px",
-  fontSize: 16,
-  textAlign: "left",
-  cursor: "pointer",
-};
+function PlayIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M7 5 L19 12 L7 19 Z" />
+    </svg>
+  );
+}
 
-const cancelStyle: React.CSSProperties = {
-  background: "transparent",
-  color: "var(--muted)",
-  border: "none",
-  padding: "10px 14px",
-  fontSize: 14,
-  textAlign: "center",
-  cursor: "pointer",
-};
+function StopIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="6" width="12" height="12" rx="1.5" />
+    </svg>
+  );
+}
