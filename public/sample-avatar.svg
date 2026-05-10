@@ -1,0 +1,50 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Backdrop tile (so it shows on light or dark) -->
+  <rect width="200" height="200" rx="14" fill="#2a2a32" />
+
+  <!-- Party hat: pom + cone + brim + decoration -->
+  <circle cx="100" cy="22" r="9" fill="#ffd9e2" />
+  <circle cx="97" cy="19" r="3" fill="#fff" opacity="0.7" />
+  <path d="M70 64 L100 28 L130 64 Z" fill="#4cc9f0" />
+  <path d="M73 60 L100 30 L100 60 Z" fill="#3aa9d6" />
+  <circle cx="92" cy="50" r="3.6" fill="#ffe066" />
+  <circle cx="108" cy="55" r="3" fill="#ffe066" />
+  <circle cx="100" cy="40" r="2.5" fill="#fff" />
+  <ellipse cx="100" cy="65" rx="36" ry="5" fill="#3aa9d6" />
+
+  <!-- Ears (outer) -->
+  <path d="M60 100 L48 58 L82 82 Z" fill="#e8732e" />
+  <path d="M140 100 L152 58 L118 82 Z" fill="#e8732e" />
+  <!-- Ears (inner) -->
+  <path d="M65 92 L56 66 L76 82 Z" fill="#f5c8a8" />
+  <path d="M135 92 L144 66 L124 82 Z" fill="#f5c8a8" />
+
+  <!-- Head -->
+  <ellipse cx="100" cy="124" rx="52" ry="48" fill="#e8732e" />
+
+  <!-- White muzzle + chevron stripe -->
+  <ellipse cx="100" cy="140" rx="40" ry="30" fill="#fff5ea" />
+  <path d="M85 88 Q100 78 115 88 L113 102 Q100 96 87 102 Z" fill="#fff5ea" />
+
+  <!-- Eyes -->
+  <ellipse cx="80" cy="116" rx="6.5" ry="7.5" fill="#1a1a1f" />
+  <ellipse cx="120" cy="116" rx="6.5" ry="7.5" fill="#1a1a1f" />
+  <circle cx="82" cy="113" r="2.2" fill="#fff" />
+  <circle cx="122" cy="113" r="2.2" fill="#fff" />
+
+  <!-- Cheek blush -->
+  <ellipse cx="68" cy="140" rx="7" ry="4" fill="#f5b8c5" opacity="0.65" />
+  <ellipse cx="132" cy="140" rx="7" ry="4" fill="#f5b8c5" opacity="0.65" />
+
+  <!-- Nose (heart-shaped) -->
+  <path d="M92 134 Q100 138 108 134 Q106 144 100 146 Q94 144 92 134 Z" fill="#1a1a1f" />
+
+  <!-- Smile -->
+  <path
+    d="M86 150 Q100 162 114 150"
+    stroke="#1a1a1f"
+    stroke-width="3"
+    fill="none"
+    stroke-linecap="round"
+  />
+</svg>
