@@ -214,7 +214,7 @@ function Lobby({
                   opacity: p.connected ? 1 : 0.4,
                 }}
               >
-                <Avatar id={p.avatar} size={42} />
+                <Avatar id={p.avatar} size={64} />
                 <span style={{ flex: 1 }}>
                   {p.name}
                   {state.hostPlayerId === p.id && (
@@ -375,8 +375,8 @@ function RoundPlaying({ state }: { state: PublicGameState }) {
                 opacity: p.connected ? 1 : 0.4,
               }}
             >
-              <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Avatar id={p.avatar} size={42} />
+              <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <Avatar id={p.avatar} size={60} />
                 <span>
                   {p.name}
                   {p.scoreMultiplier !== 1 && (
@@ -549,7 +549,7 @@ function BestCard({
         {word}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, fontSize: 18 }}>
-        <Avatar id={player.avatar} size={36} />
+        <Avatar id={player.avatar} size={56} />
         <span>{player.name}</span>
         <span style={{ marginLeft: "auto", color: "var(--muted)" }}>{subtitle}</span>
       </div>
@@ -788,9 +788,9 @@ function PangramReveal({ summary }: { summary: RoundSummary }) {
                 flexWrap: "wrap",
               }}
             >
-              <span style={{ fontSize: 26, fontWeight: 700, textTransform: "uppercase" }}>{w}</span>
+              <span style={{ fontSize: 36, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1 }}>{w}</span>
               {summary.definitions[w] && (
-                <span style={{ fontSize: 17, opacity: 0.85, flex: 1, minWidth: 240 }}>
+                <span style={{ fontSize: 18, opacity: 0.85, flex: 1, minWidth: 240 }}>
                   {summary.definitions[w]}
                 </span>
               )}
@@ -822,7 +822,7 @@ function PerPlayerResults({ state, summary }: { state: PublicGameState; summary:
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 10 }}>
-                  {p && <Avatar id={p.avatar} size={42} />}
+                  {p && <Avatar id={p.avatar} size={56} />}
                   <span>{p?.name ?? "—"}</span>
                 </h3>
                 <div style={{ fontSize: 24, fontWeight: 700 }}>
@@ -856,15 +856,16 @@ function WordChip({ word }: { word: { word: string; points: number; isPangram: b
         background: word.isPangram ? "var(--accent)" : "var(--bg)",
         color: word.isPangram ? "var(--accent-fg)" : "var(--fg)",
         border: "1px solid var(--border)",
-        padding: "4px 10px",
-        borderRadius: 6,
-        fontSize: 16,
+        padding: "6px 14px",
+        borderRadius: 8,
+        fontSize: 22,
         textTransform: "uppercase",
-        fontWeight: 600,
+        fontWeight: 700,
+        letterSpacing: 0.5,
       }}
       title={`${word.points} pts${word.firstFinder ? " (first finder)" : ""}${word.isPangram ? " (pangram)" : ""}`}
     >
-      {word.word} <span style={{ opacity: 0.7, fontSize: 12 }}>+{word.points}</span>
+      {word.word} <span style={{ opacity: 0.7, fontSize: 16 }}>+{word.points}</span>
       {word.firstFinder && <span style={{ marginLeft: 4 }}>★</span>}
     </span>
   );
@@ -910,7 +911,7 @@ function FinalResults({
               fontWeight: 700,
             }}
           >
-            <Avatar id={winner.player.avatar} size={72} bg={false} />
+            <Avatar id={winner.player.avatar} size={104} bg={false} />
             <span>
               {winner.player.name} wins with <strong>{winner.total}</strong> pts
             </span>
@@ -924,32 +925,54 @@ function FinalResults({
           highestPlayer={highestPlayer}
         />
 
-        <ol style={{ listStyle: "none", padding: 0, margin: "32px 0 0", display: "grid", gap: 12 }}>
+        <ol style={{ listStyle: "none", padding: 0, margin: "32px 0 0", display: "grid", gap: 16 }}>
           {ranked.map((row, i) => {
             const isWinner = i === 0;
+            const topWords = state.playerTopWords?.[row.player.id] ?? [];
             return (
               <li
                 key={row.player.id}
                 style={{
                   background: isWinner ? "var(--accent)" : "var(--bg-elev)",
                   color: isWinner ? "var(--accent-fg)" : "var(--fg)",
-                  padding: "16px 20px",
-                  borderRadius: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
+                  padding: "18px 22px",
+                  borderRadius: 14,
                   fontSize: 24,
                   fontWeight: isWinner ? 700 : 400,
                   boxShadow: isWinner ? "0 0 24px rgba(245, 180, 0, 0.35)" : undefined,
+                  textAlign: "left",
                 }}
               >
-                <span style={{ opacity: 0.7, minWidth: 40 }}>#{i + 1}</span>
-                <Avatar id={row.player.avatar} size={48} />
-                <span style={{ flex: 1, textAlign: "left" }}>
-                  {row.player.name}
-                  {isWinner && <span style={{ marginLeft: 10, fontSize: 20 }}>👑</span>}
-                </span>
-                <strong>{row.total} pts</strong>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <span style={{ opacity: 0.7, minWidth: 40 }}>#{i + 1}</span>
+                  <Avatar id={row.player.avatar} size={64} />
+                  <span style={{ flex: 1 }}>
+                    {row.player.name}
+                    {isWinner && <span style={{ marginLeft: 10, fontSize: 20 }}>👑</span>}
+                  </span>
+                  <strong>{row.total} pts</strong>
+                </div>
+                {topWords.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.6,
+                        textTransform: "uppercase",
+                        letterSpacing: 1,
+                        fontWeight: 700,
+                        marginBottom: 6,
+                      }}
+                    >
+                      Top {topWords.length} word{topWords.length === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {topWords.map((w) => (
+                        <WordChip key={w.word} word={w} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </li>
             );
           })}

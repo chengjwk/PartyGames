@@ -94,6 +94,9 @@ export interface PublicGameState {
   // Epoch ms of the last pangram found by anyone in this round. Used by the
   // host display to play a celebratory chime when a new pangram lands.
   lastPangramAt: number | null;
+  // Top 10 highest-scoring words per player across the whole game. Populated
+  // only at FINAL_RESULTS so the host can showcase each player's best plays.
+  playerTopWords: Record<string, ScoredWord[]> | null;
 }
 
 export interface PrivatePlayerState {

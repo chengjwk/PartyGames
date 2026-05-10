@@ -64,6 +64,9 @@ export default class WordHiveServer implements Party.Server {
   private recentBees: Array<{ letter: string; expiresAt: number }> = [];
   private gameStats: GameStats = { longest: null, highest: null };
   private lastPangramAt: number | null = null;
+  // Every word found across all rounds, per player. Used to compute each
+  // player's top 10 highest-scoring words at FINAL_RESULTS.
+  private allWordsByPlayer = new Map<string, ScoredWord[]>();
   // word -> definition (or null if API confirmed no entry). Persists across
   // rounds in a given room; pangrams repeat often enough that this saves work.
   // Pre-populated from build-time pangram-defs.json so seed pangrams render
@@ -245,6 +248,7 @@ export default class WordHiveServer implements Party.Server {
     for (const cid of this.players.keys()) this.totalScores.set(cid, 0);
     this.currentRound = 0;
     this.gameStats = { longest: null, highest: null };
+    this.allWordsByPlayer.clear();
     this.beginCountdown();
   }
 
@@ -378,6 +382,9 @@ export default class WordHiveServer implements Party.Server {
         r.playerId,
         (this.totalScores.get(r.playerId) ?? 0) + r.scoreThisRound,
       );
+      // Accumulate this round's words into the per-game history.
+      const all = this.allWordsByPlayer.get(r.playerId) ?? [];
+      this.allWordsByPlayer.set(r.playerId, [...all, ...r.words]);
     }
 
     const pangrams = [...this.puzzle.pangrams].sort();
@@ -442,6 +449,7 @@ export default class WordHiveServer implements Party.Server {
     }
     this.clearBee();
     this.gameStats = { longest: null, highest: null };
+    this.allWordsByPlayer.clear();
     this.broadcastState();
     this.broadcastAllPrivate();
   }
@@ -642,6 +650,7 @@ export default class WordHiveServer implements Party.Server {
     this.pausedAt = null;
     this.gameStats = { longest: null, highest: null };
     this.lastPangramAt = null;
+    this.allWordsByPlayer.clear();
     this.broadcastState();
     this.broadcastAllPrivate();
   }
@@ -720,6 +729,17 @@ export default class WordHiveServer implements Party.Server {
       };
     }
 
+    let playerTopWords: Record<string, ScoredWord[]> | null = null;
+    if (this.phase === "FINAL_RESULTS") {
+      playerTopWords = {};
+      for (const [cid, words] of this.allWordsByPlayer) {
+        const top = [...words]
+          .sort((a, b) => b.points - a.points || b.word.length - a.word.length)
+          .slice(0, 10);
+        playerTopWords[cid] = top;
+      }
+    }
+
     return {
       phase: this.phase,
       config: this.config,
@@ -741,6 +761,7 @@ export default class WordHiveServer implements Party.Server {
       gameStats: this.gameStats,
       easyModeStats,
       lastPangramAt: this.lastPangramAt,
+      playerTopWords,
     };
   }
 
