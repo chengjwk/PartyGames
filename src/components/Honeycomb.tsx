@@ -9,8 +9,11 @@ interface HoneycombProps {
 }
 
 const HEX_RADIUS = 1;
+// Flat-top hex: vertices at 0°, 60°, 120°, ... so the top + bottom are flat.
+// Combined with outer-hex centers at 30°, 90°, 150°, ... at distance √3, the
+// six neighbors share full edges with the center for a clean honeycomb.
 const HEX_PATH = Array.from({ length: 6 }, (_, i) => {
-  const angle = (Math.PI / 3) * i + Math.PI / 6;
+  const angle = (Math.PI / 3) * i;
   return `${Math.cos(angle).toFixed(4)},${Math.sin(angle).toFixed(4)}`;
 }).join(" ");
 

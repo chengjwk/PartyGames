@@ -91,6 +91,9 @@ export interface PublicGameState {
   // Easy mode: total valid word count + every word found across the room.
   // Populated only when config.easyMode is on and a round is in progress.
   easyModeStats: { totalValid: number; foundWords: string[] } | null;
+  // Epoch ms of the last pangram found by anyone in this round. Used by the
+  // host display to play a celebratory chime when a new pangram lands.
+  lastPangramAt: number | null;
 }
 
 export interface PrivatePlayerState {

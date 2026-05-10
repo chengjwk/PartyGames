@@ -16,6 +16,9 @@ export default function Host() {
   const roomCode = (room ?? "").toUpperCase();
   const { state, send } = useRoomSocket(roomCode, "host");
   usePhaseAudio(state?.phase);
+  // Pre-round 3-2-1 ticks (countdown before the round starts).
+  useTickAudio(state?.phase === "ROUND_STARTING" ? state.roundStartsAt : null);
+  usePangramAudio(state?.gameStats ? (state.lastPangramAt ?? null) : null);
 
   if (!state) return <FullPage>Connecting…</FullPage>;
 
@@ -77,27 +80,30 @@ function RoundStarting({ state }: { state: PublicGameState }) {
   );
 }
 
-// Plays shared room sounds (round start/end) when phase transitions on the
-// host display. Phones don't play these — only their own per-submit feedback.
+// Plays shared room sounds (round start/end, game end) when phase transitions
+// on the host display. Phones don't play these — only their own per-submit
+// feedback.
 function usePhaseAudio(phase: string | undefined) {
   const prev = useRef<string | null>(null);
   useEffect(() => {
     if (!phase) return;
     const before = prev.current;
     prev.current = phase;
-    if (before === null) return; // initial mount
+    if (before === null) return;
     if (phase === "ROUND_PLAYING" && before === "ROUND_STARTING") sounds.roundStart();
     if (phase === "ROUND_RESULTS" && before === "ROUND_PLAYING") sounds.roundEnd();
+    if (phase === "FINAL_RESULTS") sounds.fanfare();
   }, [phase]);
 }
 
-// Schedules tick beeps at remaining = 3s, 2s, 1s based on the round's endsAt.
-function useTickAudio(endsAt: number | null | undefined) {
+// Tick beeps at remaining = 3s, 2s, 1s before some scheduled instant.
+// Used both for the end-of-round countdown and the pre-round countdown.
+function useTickAudio(target: number | null | undefined) {
   useEffect(() => {
-    if (!endsAt) return;
+    if (!target) return;
     const timers: ReturnType<typeof setTimeout>[] = [];
     for (const sec of [3, 2, 1]) {
-      const ms = endsAt - Date.now() - sec * 1000;
+      const ms = target - Date.now() - sec * 1000;
       if (ms <= 0) continue;
       timers.push(
         setTimeout(() => {
@@ -107,7 +113,18 @@ function useTickAudio(endsAt: number | null | undefined) {
       );
     }
     return () => timers.forEach(clearTimeout);
-  }, [endsAt]);
+  }, [target]);
+}
+
+// Plays the pangram fanfare any time the server reports a new pangram.
+function usePangramAudio(lastPangramAt: number | null) {
+  const prev = useRef<number | null>(null);
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = lastPangramAt;
+    if (before === null) return; // skip initial value (server reset)
+    if (lastPangramAt && lastPangramAt !== before) sounds.pangram();
+  }, [lastPangramAt]);
 }
 
 function FullPage({ children }: { children: React.ReactNode }) {
@@ -551,7 +568,7 @@ function BigHoneycomb({
   const [center, ...outer] = letters;
   const HEX_R = 70;
   const HEX_W = HEX_R * Math.sqrt(3);
-  const D = HEX_W * 1.05;
+  const D = HEX_W; // exact tiling distance — neighbours share full edges
 
   const topX = 0;
   const topY = -D;
@@ -705,9 +722,11 @@ function BigHoneycomb({
 }
 
 function hexPoints(r: number): string {
+  // Flat-top hex (vertices at 0°, 60°, …) — pairs cleanly with the outer
+  // offsets which sit at 30°, 90°, … so all 6 neighbors share edges.
   const pts: string[] = [];
   for (let i = 0; i < 6; i++) {
-    const a = (Math.PI / 3) * i + Math.PI / 6;
+    const a = (Math.PI / 3) * i;
     pts.push(`${(r * Math.cos(a)).toFixed(2)},${(r * Math.sin(a)).toFixed(2)}`);
   }
   return pts.join(" ");

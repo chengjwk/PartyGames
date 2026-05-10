@@ -48,12 +48,16 @@ export const sounds = {
     tone(660, 110);
     tone(880, 140, { delayMs: 60 });
   },
-  // Major triad arpeggio for pangrams — bigger reward.
+  // Pangram fanfare — louder, two-octave triumphal arpeggio.
   pangram() {
-    tone(523, 120); // C5
-    tone(659, 120, { delayMs: 100 }); // E5
-    tone(784, 180, { delayMs: 200 }); // G5
-    tone(1046, 240, { delayMs: 320 }); // C6
+    const g = 0.26;
+    tone(523, 130, { gain: g }); // C5
+    tone(659, 130, { delayMs: 110, gain: g }); // E5
+    tone(784, 160, { delayMs: 220, gain: g }); // G5
+    tone(1046, 200, { delayMs: 320, gain: g + 0.04 }); // C6
+    tone(784, 120, { delayMs: 460, gain: g - 0.04 }); // G5
+    tone(1046, 280, { delayMs: 560, gain: g + 0.06 }); // C6
+    tone(1318, 360, { delayMs: 700, gain: g + 0.04, type: "triangle" }); // E6 — sparkle
   },
   // Low minor-second "buzz" for invalid words.
   bad() {
@@ -65,18 +69,31 @@ export const sounds = {
     tone(523, 200, { delayMs: 160 }); // C5
     tone(392, 320, { delayMs: 340 }); // G4
   },
-  // Soft tick for the last few seconds of a round
+  // Tick for countdown moments — bumped up so it carries across the room.
   tick() {
-    tone(880, 60, { gain: 0.08 });
+    tone(880, 70, { gain: 0.22 });
   },
-  // Final tick (last second) — slightly higher and louder than tick
+  // Final tick (last second / GO moment) — higher and louder still.
   tickFinal() {
-    tone(1046, 80, { gain: 0.14 });
+    tone(1046, 90, { gain: 0.32 });
   },
-  // Played once when a round actually starts (after countdown)
+  // Played once when a round actually starts (after countdown).
   roundStart() {
     tone(523, 100);
     tone(659, 100, { delayMs: 90 });
     tone(784, 220, { delayMs: 180 });
+  },
+  // Big celebratory fanfare for the winner reveal at the end of a game.
+  fanfare() {
+    const g = 0.3;
+    // Triumphal triad → two-octave run → sustain
+    tone(392, 200, { gain: g, type: "triangle" }); // G4
+    tone(523, 200, { delayMs: 160, gain: g, type: "triangle" }); // C5
+    tone(659, 200, { delayMs: 320, gain: g, type: "triangle" }); // E5
+    tone(784, 280, { delayMs: 480, gain: g + 0.04, type: "triangle" }); // G5
+    tone(1046, 380, { delayMs: 720, gain: g + 0.06, type: "triangle" }); // C6
+    // sparkle layer
+    tone(2093, 200, { delayMs: 720, gain: 0.08 }); // C7
+    tone(2637, 320, { delayMs: 880, gain: 0.08 }); // E7
   },
 };

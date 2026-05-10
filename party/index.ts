@@ -63,6 +63,7 @@ export default class WordHiveServer implements Party.Server {
   // doesn't fail just because the bee left a beat ago.
   private recentBees: Array<{ letter: string; expiresAt: number }> = [];
   private gameStats: GameStats = { longest: null, highest: null };
+  private lastPangramAt: number | null = null;
   // word -> definition (or null if API confirmed no entry). Persists across
   // rounds in a given room; pangrams repeat often enough that this saves work.
   // Pre-populated from build-time pangram-defs.json so seed pangrams render
@@ -250,6 +251,7 @@ export default class WordHiveServer implements Party.Server {
     this.firstFinder.clear();
     this.roundSummary = null;
     this.roundEndsAt = null;
+    this.lastPangramAt = null;
     this.roundStartsAt = Date.now() + COUNTDOWN_MS;
     this.phase = "ROUND_STARTING";
 
@@ -506,6 +508,8 @@ export default class WordHiveServer implements Party.Server {
     found.push(scored);
     this.foundByPlayer.set(clientId, found);
 
+    if (scored.isPangram) this.lastPangramAt = Date.now();
+
     // Update game-wide bests; ties go to the first to find.
     if (
       !this.gameStats.longest ||
@@ -685,6 +689,7 @@ export default class WordHiveServer implements Party.Server {
       beeUntilMs: this.beeUntilMs,
       gameStats: this.gameStats,
       easyModeStats,
+      lastPangramAt: this.lastPangramAt,
     };
   }
 

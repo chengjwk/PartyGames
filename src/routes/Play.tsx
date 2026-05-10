@@ -183,7 +183,7 @@ function NameEntry({
     <main
       style={{
         minHeight: "100dvh",
-        padding: "24px 20px",
+        padding: "60px 20px 24px",
         display: "flex",
         flexDirection: "column",
         gap: 16,
@@ -289,7 +289,7 @@ function PlayerLobby({
   const [editing, setEditing] = useState(false);
   const me = state.players.find((p) => p.id === clientId);
   return (
-    <main style={{ padding: "24px 20px" }}>
+    <main style={{ padding: "60px 20px 24px" }}>
       <h1 style={{ margin: 0, color: "var(--accent)" }}>WordHive</h1>
       <p style={{ color: "var(--muted)" }}>Room {roomCode}</p>
 
@@ -614,7 +614,7 @@ function PlayerRound({
     <main
       style={{
         minHeight: "100dvh",
-        padding: "16px 16px 24px",
+        padding: "56px 16px 24px",
         display: "flex",
         flexDirection: "column",
         gap: 12,
@@ -793,7 +793,7 @@ function PlayerRoundResults({
 }) {
   const isFinal = state.currentRound >= state.config.totalRounds;
   return (
-    <main style={{ padding: "24px 20px" }}>
+    <main style={{ padding: "60px 20px 24px" }}>
       <header
         style={{
           display: "flex",
@@ -923,7 +923,7 @@ function PlayerFinal({
   return (
     <>
       <Fireworks />
-      <main style={{ padding: "24px 20px" }}>
+      <main style={{ padding: "60px 20px 24px" }}>
         <h1 style={{ marginTop: 0 }}>Final Results</h1>
         <BestWordsRowMobile
           longest={state.gameStats.longest}
