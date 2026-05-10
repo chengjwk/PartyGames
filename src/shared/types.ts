@@ -111,7 +111,9 @@ export type ClientMessage =
   | { type: "submitWord"; word: string }
   | { type: "nextRound" }
   | { type: "playAgain" }
-  | { type: "skipWait" }; // host: resume even if some players are still disconnected
+  | { type: "skipWait" } // host: resume even if some players are still disconnected
+  | { type: "togglePause" } // any player can pause/resume an active round
+  | { type: "resetGame" }; // bail back to LOBBY from any in-game phase
 
 export type SubmitReason =
   | "too_short"

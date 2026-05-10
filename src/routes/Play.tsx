@@ -10,6 +10,7 @@ import Timer from "../components/Timer";
 import PausedOverlay from "../components/PausedOverlay";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
+import GameMenu from "../components/GameMenu";
 import Fireworks from "../components/Fireworks";
 import Avatar from "../components/Avatar";
 import type {
@@ -135,13 +136,14 @@ export default function Play() {
     <>
       <GardenBackground />
       <FullscreenButton />
+      <GameMenu state={state} send={send} />
       {view}
       {state.paused && (
         <PausedOverlay
           roomCode={roomCode}
           disconnected={disconnected}
           showQR={false}
-          onSkip={isHost ? () => send({ type: "skipWait" }) : undefined}
+          onResume={() => send({ type: "togglePause" })}
         />
       )}
     </>

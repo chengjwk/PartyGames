@@ -139,6 +139,12 @@ export default class WordHiveServer implements Party.Server {
       case "skipWait":
         if (this.isHost(sender)) this.forceResume();
         return;
+      case "togglePause":
+        this.handleTogglePause();
+        return;
+      case "resetGame":
+        this.handleResetGame();
+        return;
     }
   }
 
@@ -593,6 +599,51 @@ export default class WordHiveServer implements Party.Server {
   private forceResume() {
     if (!this.paused) return;
     this.resume();
+  }
+
+  // Manual pause toggle from any client. Only meaningful during play.
+  private handleTogglePause() {
+    if (this.phase !== "ROUND_PLAYING") return;
+    if (this.paused) {
+      this.resume();
+    } else {
+      this.doPause();
+    }
+  }
+
+  // Bail back to lobby from any in-game phase. Players keep their slots
+  // (and avatars/names) but scores reset like a brand-new game.
+  private handleResetGame() {
+    if (this.phase === "LOBBY") return;
+    if (this.roundTimer) {
+      clearTimeout(this.roundTimer);
+      this.roundTimer = null;
+    }
+    if (this.startTimer) {
+      clearTimeout(this.startTimer);
+      this.startTimer = null;
+    }
+    if (this.pauseGraceTimer) {
+      clearTimeout(this.pauseGraceTimer);
+      this.pauseGraceTimer = null;
+    }
+    this.clearBee();
+    this.phase = "LOBBY";
+    this.currentRound = 0;
+    this.totalScores.clear();
+    this.puzzle = null;
+    this.foundByPlayer.clear();
+    this.firstFinder.clear();
+    this.roundSummary = null;
+    this.roundStartsAt = null;
+    this.roundEndsAt = null;
+    this.paused = false;
+    this.pauseRemainingMs = null;
+    this.pausedAt = null;
+    this.gameStats = { longest: null, highest: null };
+    this.lastPangramAt = null;
+    this.broadcastState();
+    this.broadcastAllPrivate();
   }
 
   private resume() {

@@ -5,10 +5,10 @@ interface PausedOverlayProps {
   roomCode: string;
   disconnected: Player[];
   showQR: boolean; // big TV view shows QR; phones don't need it
-  onSkip?: () => void; // present only when current viewer is host
+  onResume: () => void; // togglePause — anyone can call
 }
 
-export default function PausedOverlay({ roomCode, disconnected, showQR, onSkip }: PausedOverlayProps) {
+export default function PausedOverlay({ roomCode, disconnected, showQR, onResume }: PausedOverlayProps) {
   const playUrl = `${window.location.origin}/play/${roomCode}`;
   return (
     <div
@@ -30,16 +30,20 @@ export default function PausedOverlay({ roomCode, disconnected, showQR, onSkip }
       <div style={{ fontSize: showQR ? 72 : 36, fontWeight: 800, color: "var(--accent)", letterSpacing: 2 }}>
         PAUSED
       </div>
-      <div style={{ fontSize: showQR ? 28 : 20, color: "var(--fg)", maxWidth: 700 }}>
-        Waiting for{" "}
-        <strong>
-          {disconnected.length === 0
-            ? "a player"
-            : disconnected.map((p) => `${p.avatar} ${p.name}`).join(", ")}
-        </strong>{" "}
-        to reconnect…
-      </div>
-      {showQR && (
+      {disconnected.length > 0 ? (
+        <div style={{ fontSize: showQR ? 28 : 20, color: "var(--fg)", maxWidth: 700 }}>
+          Waiting for{" "}
+          <strong>
+            {disconnected.map((p) => `${p.avatar} ${p.name}`).join(", ")}
+          </strong>{" "}
+          to reconnect…
+        </div>
+      ) : (
+        <div style={{ fontSize: showQR ? 28 : 20, color: "var(--muted)", maxWidth: 700 }}>
+          Tap Resume on any device to continue.
+        </div>
+      )}
+      {showQR && disconnected.length > 0 && (
         <>
           <div
             style={{
@@ -55,10 +59,13 @@ export default function PausedOverlay({ roomCode, disconnected, showQR, onSkip }
           <div style={{ fontSize: 56, fontWeight: 800, letterSpacing: 8 }}>{roomCode}</div>
         </>
       )}
-      {onSkip && (
-        <button onClick={onSkip} style={{ fontSize: 18, padding: "12px 22px" }}>
-          Skip & continue without them
-        </button>
+      <button onClick={onResume} style={{ fontSize: 20, padding: "14px 28px" }}>
+        ▶  Resume
+      </button>
+      {disconnected.length > 0 && (
+        <div style={{ fontSize: 13, color: "var(--muted)" }}>
+          Resuming will continue without disconnected players.
+        </div>
       )}
     </div>
   );
