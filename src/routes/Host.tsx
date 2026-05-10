@@ -745,7 +745,7 @@ function RoundResults({
   if (!summary) return <FullPage>Loading…</FullPage>;
   const isFinal = state.currentRound >= state.config.totalRounds;
   return (
-    <main style={{ minHeight: "100dvh", padding: 32, maxWidth: 1200, margin: "0 auto" }}>
+    <main style={{ minHeight: "100dvh", padding: 32, maxWidth: 1400, margin: "0 auto" }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={{ margin: 0, fontSize: 36 }}>
           Round {state.currentRound} results
@@ -805,42 +805,59 @@ function PangramReveal({ summary }: { summary: RoundSummary }) {
 function PerPlayerResults({ state, summary }: { state: PublicGameState; summary: RoundSummary }) {
   const sorted = [...summary.perPlayer].sort((a, b) => b.scoreThisRound - a.scoreThisRound);
   const playersById = new Map(state.players.map((p) => [p.id, p]));
+  const topScore = sorted[0]?.scoreThisRound ?? 0;
   return (
     <section style={{ marginTop: 32 }}>
       <h2>Scores</h2>
-      <div style={{ display: "grid", gap: 12 }}>
+      <div style={{ display: "grid", gap: 18 }}>
         {sorted.map((r) => {
           const p = playersById.get(r.playerId);
+          const isTop = topScore > 0 && r.scoreThisRound === topScore;
+          const avatarSize = isTop ? 200 : 160;
           return (
             <div
               key={r.playerId}
               style={{
-                background: "var(--bg-elev)",
-                padding: 16,
-                borderRadius: 12,
+                background: isTop ? "var(--accent)" : "var(--bg-elev)",
+                color: isTop ? "var(--accent-fg)" : "var(--fg)",
+                padding: "22px 24px",
+                borderRadius: 16,
+                display: "flex",
+                alignItems: "center",
+                gap: 24,
+                boxShadow: isTop ? "0 0 28px rgba(245, 180, 0, 0.3)" : undefined,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 10 }}>
-                  {p && <Avatar id={p.avatar} size={56} />}
-                  <span>{p?.name ?? "—"}</span>
-                </h3>
-                <div style={{ fontSize: 24, fontWeight: 700 }}>
-                  +{r.scoreThisRound}{" "}
-                  <span style={{ color: "var(--muted)", fontSize: 16, fontWeight: 400 }}>
-                    (total {state.totalScores[r.playerId] ?? 0})
+              {p && <Avatar id={p.avatar} size={avatarSize} bg={!isTop} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "baseline",
+                    gap: 14,
+                  }}
+                >
+                  <span style={{ fontSize: 30, fontWeight: 700, flex: 1 }}>
+                    {p?.name ?? "—"}
+                    {isTop && <span style={{ marginLeft: 12, fontSize: 26 }}>🏅</span>}
                   </span>
+                  <div style={{ fontSize: 32, fontWeight: 800, whiteSpace: "nowrap" }}>
+                    +{r.scoreThisRound}
+                    <span style={{ opacity: 0.65, fontSize: 18, fontWeight: 400, marginLeft: 8 }}>
+                      ({state.totalScores[r.playerId] ?? 0} total)
+                    </span>
+                  </div>
                 </div>
+                {r.words.length === 0 ? (
+                  <p style={{ opacity: 0.7, marginTop: 8 }}>No words found.</p>
+                ) : (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
+                    {r.words.map((w) => (
+                      <WordChip key={w.word} word={w} />
+                    ))}
+                  </div>
+                )}
               </div>
-              {r.words.length === 0 ? (
-                <p style={{ color: "var(--muted)", marginTop: 8 }}>No words found.</p>
-              ) : (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                  {r.words.map((w) => (
-                    <WordChip key={w.word} word={w} />
-                  ))}
-                </div>
-              )}
             </div>
           );
         })}
