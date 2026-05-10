@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Avatar style comparison — Dragon</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #1a1a1f;
+        color: #f5f5f7;
+      }
+      body { margin: 0; padding: 32px; }
+      h1 { margin: 0 0 24px; font-size: 28px; }
+      p.intro { color: #9a9aa6; margin: 0 0 32px; max-width: 640px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 24px;
+      }
+      .card {
+        background: #26262e;
+        border-radius: 14px;
+        padding: 20px;
+      }
+      .card h2 {
+        margin: 0 0 4px;
+        font-size: 18px;
+      }
+      .card .desc {
+        color: #9a9aa6;
+        font-size: 13px;
+        margin: 0 0 14px;
+        min-height: 36px;
+      }
+      .canvas {
+        background: #2a2a32;
+        border-radius: 12px;
+        aspect-ratio: 1 / 1;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+      svg { width: 90%; height: 90%; }
+    </style>
+  </head>
+  <body>
+    <h1>Dragon — 4 styles to compare</h1>
+    <p class="intro">
+      Same character, four visual flavors. Pick one and the other 23 avatars
+      get redrawn in that style.
+    </p>
+
+    <div class="grid">
+      <div class="card">
+        <h2>A. Friendly Flat <span style="color:#9a9aa6;font-weight:400">(current)</span></h2>
+        <p class="desc">Mid-detail flat colors, big simple eyes, no outlines. What the game ships with today.</p>
+        <div class="canvas">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="100" cy="60" rx="42" ry="5" fill="#3d2960" />
+            <path d="M65 60 L100 6 L135 60 Z" fill="#5b3d8c" />
+            <path d="M70 58 L100 8 L100 58 Z" fill="#6f4ba6" />
+            <path d="M88 32 L90 36 L94 36 L90.8 38.6 L92 43 L88 40.5 L84 43 L85.2 38.6 L82 36 L86 36 Z" fill="#ffd166" />
+            <path d="M50 90 L40 60 L62 78 Z" fill="#7a2a20" />
+            <path d="M150 90 L160 60 L138 78 Z" fill="#7a2a20" />
+            <ellipse cx="100" cy="125" rx="54" ry="48" fill="#c44a3a" />
+            <ellipse cx="100" cy="148" rx="36" ry="24" fill="#e08e7e" />
+            <path d="M70 100 Q80 96 90 100 M110 100 Q120 96 130 100" stroke="#7a2a20" stroke-width="2" fill="none" />
+            <ellipse cx="80" cy="118" rx="5.5" ry="8" fill="#ffd166" />
+            <ellipse cx="120" cy="118" rx="5.5" ry="8" fill="#ffd166" />
+            <ellipse cx="80" cy="118" rx="2" ry="5" fill="#1a1a1f" />
+            <ellipse cx="120" cy="118" rx="2" ry="5" fill="#1a1a1f" />
+            <circle cx="92" cy="138" r="2.5" fill="#1a1a1f" />
+            <circle cx="108" cy="138" r="2.5" fill="#1a1a1f" />
+            <path d="M86 150 Q100 162 114 150" stroke="#1a1a1f" stroke-width="3" fill="none" stroke-linecap="round" />
+            <circle cx="58" cy="148" r="4" fill="#a8a8b5" opacity="0.6" />
+            <circle cx="50" cy="142" r="3" fill="#a8a8b5" opacity="0.4" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>B. Kawaii Chibi</h2>
+        <p class="desc">Oversized head, huge sparkly eyes, tiny features, pastel palette, lots of blush. Very young-kid friendly.</p>
+        <div class="canvas">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <!-- tiny pastel hat -->
+            <ellipse cx="100" cy="48" rx="28" ry="3" fill="#b89bd6" />
+            <path d="M76 48 Q100 12 124 48 Z" fill="#d8c0ed" />
+            <circle cx="92" cy="28" r="2" fill="#fff8c0" />
+            <circle cx="106" cy="22" r="2.5" fill="#fff8c0" />
+            <!-- tiny rounded horns -->
+            <ellipse cx="64" cy="76" rx="6" ry="9" fill="#ffd1ad" transform="rotate(-30 64 76)" />
+            <ellipse cx="136" cy="76" rx="6" ry="9" fill="#ffd1ad" transform="rotate(30 136 76)" />
+            <!-- huge round head -->
+            <circle cx="100" cy="120" r="68" fill="#ffb3a8" />
+            <circle cx="100" cy="135" r="42" fill="#ffd9d3" />
+            <!-- massive eyes -->
+            <circle cx="78" cy="120" r="14" fill="#1a1a1f" />
+            <circle cx="122" cy="120" r="14" fill="#1a1a1f" />
+            <circle cx="74" cy="116" r="5" fill="#fff" />
+            <circle cx="118" cy="116" r="5" fill="#fff" />
+            <circle cx="82" cy="124" r="2.5" fill="#fff" />
+            <circle cx="126" cy="124" r="2.5" fill="#fff" />
+            <!-- giant blush -->
+            <circle cx="58" cy="138" r="11" fill="#ff9aaa" opacity="0.7" />
+            <circle cx="142" cy="138" r="11" fill="#ff9aaa" opacity="0.7" />
+            <!-- tiny mouth -->
+            <path d="M94 146 Q100 152 106 146" stroke="#1a1a1f" stroke-width="2.5" fill="none" stroke-linecap="round" />
+            <!-- sparkles -->
+            <path d="M40 70 l2 4 l4 2 l-4 2 l-2 4 l-2 -4 l-4 -2 l4 -2 z" fill="#fff" />
+            <path d="M160 78 l1.5 3 l3 1.5 l-3 1.5 l-1.5 3 l-1.5 -3 l-3 -1.5 l3 -1.5 z" fill="#fff" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>C. Outlined Sticker</h2>
+        <p class="desc">Thick black outlines around saturated fills. Pokémon / Splatoon / sticker pack feel. Very legible at small sizes.</p>
+        <div class="canvas">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" stroke="#0c0c14" stroke-linejoin="round" stroke-linecap="round">
+            <!-- wizard hat -->
+            <ellipse cx="100" cy="60" rx="44" ry="6" fill="#3d2960" stroke-width="4" />
+            <path d="M62 60 L100 4 L138 60 Z" fill="#7a52b8" stroke-width="4" />
+            <path d="M86 30 l3 6 l6 1 l-4.5 4 l1 6 l-5.5 -3 l-5.5 3 l1 -6 l-4.5 -4 l6 -1 z" fill="#ffd166" stroke-width="3" />
+            <!-- horns -->
+            <path d="M50 88 L38 56 L66 78 Z" fill="#a83828" stroke-width="4" />
+            <path d="M150 88 L162 56 L134 78 Z" fill="#a83828" stroke-width="4" />
+            <!-- head -->
+            <ellipse cx="100" cy="124" rx="56" ry="50" fill="#e74c3c" stroke-width="4" />
+            <ellipse cx="100" cy="144" rx="36" ry="22" fill="#ffb3a4" stroke-width="3" />
+            <!-- scales -->
+            <path d="M68 102 q8 -6 16 0 m12 0 q8 -6 16 0 m12 0 q8 -6 16 0" stroke-width="3" fill="none" />
+            <!-- eyes -->
+            <ellipse cx="78" cy="116" rx="9" ry="11" fill="#fff" stroke-width="3" />
+            <ellipse cx="122" cy="116" rx="9" ry="11" fill="#fff" stroke-width="3" />
+            <ellipse cx="78" cy="118" rx="4" ry="6" fill="#0c0c14" stroke="none" />
+            <ellipse cx="122" cy="118" rx="4" ry="6" fill="#0c0c14" stroke="none" />
+            <circle cx="80" cy="115" r="2" fill="#fff" stroke="none" />
+            <circle cx="124" cy="115" r="2" fill="#fff" stroke="none" />
+            <!-- nostrils -->
+            <ellipse cx="92" cy="138" rx="2" ry="3" fill="#0c0c14" stroke="none" />
+            <ellipse cx="108" cy="138" rx="2" ry="3" fill="#0c0c14" stroke="none" />
+            <!-- mouth with fang -->
+            <path d="M82 150 Q100 168 118 150" stroke-width="4" fill="none" />
+            <path d="M92 158 L94 165 L96 158 Z" fill="#fff" stroke-width="2" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>D. Storybook Illustrated</h2>
+        <p class="desc">More layered shading, drawn scales, asymmetric details. Children's-book illustration. Heavier visual weight.</p>
+        <div class="canvas">
+          <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="dragon-d-body" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#9d3a2a" />
+                <stop offset="100%" stop-color="#c44a3a" />
+              </linearGradient>
+              <linearGradient id="dragon-d-belly" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#f5b8a8" />
+                <stop offset="100%" stop-color="#e08e7e" />
+              </linearGradient>
+              <linearGradient id="dragon-d-hat" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#7a52b8" />
+                <stop offset="100%" stop-color="#3d2960" />
+              </linearGradient>
+            </defs>
+            <!-- hat with fold + brim shadow -->
+            <ellipse cx="100" cy="62" rx="44" ry="6" fill="#2c1d44" />
+            <ellipse cx="100" cy="60" rx="44" ry="6" fill="#3d2960" />
+            <path d="M62 60 L100 4 L138 60 Z" fill="url(#dragon-d-hat)" />
+            <path d="M70 58 L100 12 Q88 30 70 58 Z" fill="#9d76d6" opacity="0.5" />
+            <path d="M86 30 l3 6 l6 1 l-4.5 4 l1 6 l-5.5 -3 l-5.5 3 l1 -6 l-4.5 -4 l6 -1 z" fill="#ffd166" />
+            <!-- horns with shading -->
+            <path d="M50 88 L38 56 L66 78 Z" fill="#7a2a20" />
+            <path d="M50 88 L48 70 L60 78 Z" fill="#5a1a10" />
+            <path d="M150 88 L162 56 L134 78 Z" fill="#7a2a20" />
+            <path d="M150 88 L152 70 L140 78 Z" fill="#5a1a10" />
+            <!-- head with gradient -->
+            <ellipse cx="100" cy="124" rx="55" ry="48" fill="url(#dragon-d-body)" />
+            <!-- jaw shadow -->
+            <ellipse cx="100" cy="160" rx="40" ry="14" fill="#7a2a20" opacity="0.4" />
+            <!-- belly -->
+            <ellipse cx="100" cy="148" rx="36" ry="24" fill="url(#dragon-d-belly)" />
+            <!-- detailed scales -->
+            <g stroke="#7a2a20" stroke-width="1.6" fill="none">
+              <path d="M58 96 q6 -5 12 0" />
+              <path d="M76 92 q6 -5 12 0" />
+              <path d="M94 90 q6 -5 12 0" />
+              <path d="M112 92 q6 -5 12 0" />
+              <path d="M130 96 q6 -5 12 0" />
+              <path d="M62 110 q6 -5 12 0" />
+              <path d="M82 108 q6 -5 12 0" />
+              <path d="M104 108 q6 -5 12 0" />
+              <path d="M126 110 q6 -5 12 0" />
+            </g>
+            <!-- eye ridge -->
+            <path d="M62 108 Q80 100 96 108 Q120 100 138 108" stroke="#5a1a10" stroke-width="3" fill="none" stroke-linecap="round" />
+            <!-- eyes with depth -->
+            <ellipse cx="80" cy="120" rx="7" ry="9" fill="#fff5d0" />
+            <ellipse cx="120" cy="120" rx="7" ry="9" fill="#fff5d0" />
+            <ellipse cx="80" cy="120" rx="3" ry="6" fill="#1a1a1f" />
+            <ellipse cx="120" cy="120" rx="3" ry="6" fill="#1a1a1f" />
+            <circle cx="81" cy="117" r="1.6" fill="#fff" />
+            <circle cx="121" cy="117" r="1.6" fill="#fff" />
+            <!-- nostril shadows -->
+            <ellipse cx="92" cy="140" rx="2.5" ry="3" fill="#1a1a1f" />
+            <ellipse cx="108" cy="140" rx="2.5" ry="3" fill="#1a1a1f" />
+            <!-- mouth with smile lines -->
+            <path d="M84 152 Q100 166 116 152" stroke="#1a1a1f" stroke-width="2.6" fill="none" stroke-linecap="round" />
+            <path d="M84 152 Q86 156 90 156" stroke="#5a1a10" stroke-width="1.5" fill="none" stroke-linecap="round" />
+            <path d="M116 152 Q114 156 110 156" stroke="#5a1a10" stroke-width="1.5" fill="none" stroke-linecap="round" />
+            <!-- smoke wisps -->
+            <ellipse cx="55" cy="148" rx="6" ry="3" fill="#a8a8b5" opacity="0.5" />
+            <ellipse cx="46" cy="142" rx="4" ry="2.5" fill="#a8a8b5" opacity="0.4" />
+            <ellipse cx="40" cy="138" rx="3" ry="2" fill="#a8a8b5" opacity="0.3" />
+          </svg>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

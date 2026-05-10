@@ -24,7 +24,7 @@ export interface RoundConfig {
 export const DEFAULT_CONFIG: RoundConfig = {
   totalRounds: 3,
   roundDurationSeconds: 60,
-  easyMode: false,
+  easyMode: true,
 };
 
 export interface PuzzlePublic {
@@ -88,6 +88,9 @@ export interface PublicGameState {
   beeLetter: string | null;
   beeUntilMs: number | null; // epoch ms when this bee leaves
   gameStats: GameStats;
+  // Easy mode: total valid word count + every word found across the room.
+  // Populated only when config.easyMode is on and a round is in progress.
+  easyModeStats: { totalValid: number; foundWords: string[] } | null;
 }
 
 export interface PrivatePlayerState {

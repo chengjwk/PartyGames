@@ -12,8 +12,19 @@ const ANIMALS = [
   "Dolphin", "Hamster", "Llama", "Yak", "Capybara", "Mongoose",
 ];
 
+const FOODS = [
+  "Pizza", "Donut", "Taco", "Pretzel", "Bagel", "Pancake", "Waffle", "Burrito",
+  "Ravioli", "Cupcake", "Sundae", "Pickle", "Biscuit", "Macaron", "Croissant", "Muffin",
+  "Cookie", "Latte", "Mango", "Pepper", "Avocado", "Banana", "Tofu", "Noodle",
+  "Dumpling", "Lemon", "Brownie", "Marshmallow", "Pumpkin", "Toast",
+];
+
+const NOUNS = [...ANIMALS, ...FOODS];
+
+function pick<T>(arr: ReadonlyArray<T>): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 export function randomName(): string {
-  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
-  const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
-  return `${adj} ${animal}`;
+  return `${pick(ADJECTIVES)} ${pick(NOUNS)}`;
 }

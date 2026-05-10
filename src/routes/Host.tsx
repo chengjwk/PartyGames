@@ -251,7 +251,7 @@ function Lobby({
               onChange={(v) => setCfg({ roundDurationSeconds: v })}
             />
           </ConfigRow>
-          <ConfigRow label="Easy mode (show found-word counts)">
+          <ConfigRow label="Show detailed live stats on TV">
             <input
               type="checkbox"
               checked={cfg.easyMode}
@@ -316,20 +316,29 @@ function RoundPlaying({ state }: { state: PublicGameState }) {
   const liveCounts = state.liveCounts;
 
   return (
-    <main style={{ minHeight: "100dvh", padding: 32, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
-      <section style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "var(--muted)", fontSize: 18 }}>
-          Round {state.currentRound} of {state.config.totalRounds}
-        </div>
-        <Timer endsAt={state.roundEndsAt} />
-        <div style={{ marginTop: 24 }}>
-          <BigHoneycomb
-            letters={puzzle.letters}
-            bonusLetter={puzzle.bonusLetter}
-            beeLetter={state.beeLetter}
-          />
-        </div>
-      </section>
+    <main
+      style={{
+        minHeight: "100dvh",
+        padding: 32,
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, flex: 1 }}>
+        <section style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ color: "var(--muted)", fontSize: 18 }}>
+            Round {state.currentRound} of {state.config.totalRounds}
+          </div>
+          <Timer endsAt={state.roundEndsAt} />
+          <div style={{ marginTop: 24 }}>
+            <BigHoneycomb
+              letters={puzzle.letters}
+              bonusLetter={puzzle.bonusLetter}
+              beeLetter={state.beeLetter}
+            />
+          </div>
+        </section>
       <section style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <h2 style={{ marginTop: 0, fontSize: 32 }}>Players</h2>
         <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
@@ -372,7 +381,74 @@ function RoundPlaying({ state }: { state: PublicGameState }) {
           ))}
         </ul>
       </section>
+      </div>
+      {state.easyModeStats && <EasyModePanel stats={state.easyModeStats} />}
     </main>
+  );
+}
+
+function EasyModePanel({
+  stats,
+}: {
+  stats: { totalValid: number; foundWords: string[] };
+}) {
+  return (
+    <div
+      style={{
+        padding: "14px 24px",
+        background: "var(--bg-elev)",
+        borderRadius: 14,
+        display: "flex",
+        alignItems: "center",
+        gap: 20,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 700,
+          whiteSpace: "nowrap",
+          color: "var(--accent)",
+        }}
+      >
+        {stats.foundWords.length}
+        <span style={{ color: "var(--muted)", fontWeight: 400 }}> / {stats.totalValid}</span>
+        <span style={{ color: "var(--muted)", fontSize: 14, fontWeight: 400, marginLeft: 8 }}>found</span>
+      </div>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 5,
+          maxHeight: 80,
+          overflowY: "auto",
+        }}
+      >
+        {stats.foundWords.length === 0 ? (
+          <span style={{ color: "var(--muted)", fontSize: 14, fontStyle: "italic" }}>
+            Words will appear here as the room finds them.
+          </span>
+        ) : (
+          stats.foundWords.map((w) => (
+            <span
+              key={w}
+              style={{
+                background: "var(--bg)",
+                padding: "3px 9px",
+                borderRadius: 5,
+                fontSize: 14,
+                textTransform: "uppercase",
+                fontWeight: 600,
+                color: "var(--muted)",
+              }}
+            >
+              {w}
+            </span>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 

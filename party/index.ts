@@ -641,12 +641,28 @@ export default class WordHiveServer implements Party.Server {
   }
 
   private snapshot(): PublicGameState {
+    // Live found-word counts always shown during play (was previously gated
+    // on easy mode; now it's just nice-to-have info on the host display).
     let liveCounts: Record<string, number> | null = null;
-    if (this.config.easyMode && this.phase === "ROUND_PLAYING") {
+    if (this.phase === "ROUND_PLAYING") {
       liveCounts = {};
       for (const [cid, words] of this.foundByPlayer) {
         liveCounts[cid] = words.length;
       }
+    }
+
+    // Easy mode reveals the puzzle's valid-word count and every word the
+    // room has collectively found, so kids/spectators can see hints.
+    let easyModeStats: PublicGameState["easyModeStats"] = null;
+    if (
+      this.config.easyMode &&
+      this.puzzle &&
+      (this.phase === "ROUND_PLAYING" || this.phase === "ROUND_STARTING")
+    ) {
+      easyModeStats = {
+        totalValid: this.puzzle.validWords.size,
+        foundWords: [...this.firstFinder.keys()].sort(),
+      };
     }
 
     return {
@@ -668,6 +684,7 @@ export default class WordHiveServer implements Party.Server {
       beeLetter: this.beeLetter,
       beeUntilMs: this.beeUntilMs,
       gameStats: this.gameStats,
+      easyModeStats,
     };
   }
 
