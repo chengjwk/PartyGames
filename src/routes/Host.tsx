@@ -893,7 +893,7 @@ function FinalResults({
   return (
     <>
       <Fireworks />
-      <main style={{ minHeight: "100dvh", padding: 32, maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
+      <main style={{ minHeight: "100dvh", padding: 32, maxWidth: 1400, margin: "0 auto", textAlign: "center" }}>
         <h1 style={{ fontSize: 56, marginBottom: 8 }}>Final Results</h1>
         {winner && (
           <div
@@ -925,54 +925,66 @@ function FinalResults({
           highestPlayer={highestPlayer}
         />
 
-        <ol style={{ listStyle: "none", padding: 0, margin: "32px 0 0", display: "grid", gap: 16 }}>
+        <ol style={{ listStyle: "none", padding: 0, margin: "32px 0 0", display: "grid", gap: 18 }}>
           {ranked.map((row, i) => {
             const isWinner = i === 0;
             const topWords = state.playerTopWords?.[row.player.id] ?? [];
+            const avatarSize = isWinner ? 220 : 180;
             return (
               <li
                 key={row.player.id}
                 style={{
                   background: isWinner ? "var(--accent)" : "var(--bg-elev)",
                   color: isWinner ? "var(--accent-fg)" : "var(--fg)",
-                  padding: "18px 22px",
-                  borderRadius: 14,
-                  fontSize: 24,
+                  padding: "22px 24px",
+                  borderRadius: 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 24,
                   fontWeight: isWinner ? 700 : 400,
-                  boxShadow: isWinner ? "0 0 24px rgba(245, 180, 0, 0.35)" : undefined,
+                  boxShadow: isWinner ? "0 0 36px rgba(245, 180, 0, 0.4)" : undefined,
                   textAlign: "left",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <span style={{ opacity: 0.7, minWidth: 40 }}>#{i + 1}</span>
-                  <Avatar id={row.player.avatar} size={64} />
-                  <span style={{ flex: 1 }}>
-                    {row.player.name}
-                    {isWinner && <span style={{ marginLeft: 10, fontSize: 20 }}>👑</span>}
-                  </span>
-                  <strong>{row.total} pts</strong>
-                </div>
-                {topWords.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        opacity: 0.6,
-                        textTransform: "uppercase",
-                        letterSpacing: 1,
-                        fontWeight: 700,
-                        marginBottom: 6,
-                      }}
-                    >
-                      Top {topWords.length} word{topWords.length === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {topWords.map((w) => (
-                        <WordChip key={w.word} word={w} />
-                      ))}
-                    </div>
+                <Avatar id={row.player.avatar} size={avatarSize} bg={!isWinner} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 14,
+                      fontSize: 32,
+                    }}
+                  >
+                    <span style={{ opacity: 0.7 }}>#{i + 1}</span>
+                    <span style={{ flex: 1 }}>
+                      {row.player.name}
+                      {isWinner && <span style={{ marginLeft: 12, fontSize: 28 }}>👑</span>}
+                    </span>
+                    <strong style={{ fontSize: 36 }}>{row.total} pts</strong>
                   </div>
-                )}
+                  {topWords.length > 0 && (
+                    <div style={{ marginTop: 14 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          opacity: 0.65,
+                          textTransform: "uppercase",
+                          letterSpacing: 1.5,
+                          fontWeight: 700,
+                          marginBottom: 8,
+                        }}
+                      >
+                        Top {topWords.length} word{topWords.length === 1 ? "" : "s"}
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {topWords.map((w) => (
+                          <WordChip key={w.word} word={w} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </li>
             );
           })}

@@ -1,6 +1,10 @@
 // Tiny WebAudio cues. No asset files — synthesized tones.
-// First call must be inside a user gesture (browser autoplay policy);
-// we lazy-init the AudioContext on first play.
+//
+// Browsers block AudioContext until a user gesture. State changes from the
+// realtime server arrive without any gesture, so a fanfare triggered by a
+// phase transition would be silent. We register a one-shot gesture listener
+// at module load that resumes (and lazy-creates) the context on the first
+// click/keypress/touch — after that, all sound calls play normally.
 
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -17,6 +21,21 @@ function getCtx(): AudioContext | null {
     }
   }
   return ctx;
+}
+
+if (typeof window !== "undefined") {
+  const unlock = () => {
+    const c = getCtx();
+    if (c && c.state === "suspended") {
+      c.resume().catch(() => {});
+    }
+    window.removeEventListener("pointerdown", unlock);
+    window.removeEventListener("keydown", unlock);
+    window.removeEventListener("touchstart", unlock);
+  };
+  window.addEventListener("pointerdown", unlock, { once: false });
+  window.addEventListener("keydown", unlock, { once: false });
+  window.addEventListener("touchstart", unlock, { once: false });
 }
 
 function tone(freq: number, durationMs: number, opts: { gain?: number; type?: OscillatorType; delayMs?: number } = {}) {
