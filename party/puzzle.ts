@@ -13,6 +13,7 @@ export interface Puzzle {
   validWords: Set<string>;
   pangrams: string[];
   bonusLetter: string; // outer letter scoring 2x
+  seedWord: string; // the pangram used as the seed (for repeat avoidance)
 }
 
 // Find every dictionary word that could be played given a set of 7 letters
@@ -61,9 +62,14 @@ function pickWeightedCenter(letters: string[]): string {
   return letters[letters.length - 1];
 }
 
-export function generatePuzzle(attempts = 50): Puzzle {
+export function generatePuzzle(
+  opts: { exclude?: ReadonlySet<string>; attempts?: number } = {},
+): Puzzle {
+  const attempts = opts.attempts ?? 80;
+  const exclude = opts.exclude ?? new Set<string>();
   for (let i = 0; i < attempts; i++) {
     const seed = PANGRAM_SEEDS[Math.floor(Math.random() * PANGRAM_SEEDS.length)];
+    if (exclude.has(seed)) continue;
     const letters = [...new Set(seed)]; // 7 unique chars
     const center = pickWeightedCenter(letters);
     const letterSet = new Set(letters);
@@ -85,11 +91,19 @@ export function generatePuzzle(attempts = 50): Puzzle {
       validWords,
       pangrams,
       bonusLetter,
+      seedWord: seed,
     };
   }
-  // Fallback: relax constraints
-  const seed = PANGRAM_SEEDS[Math.floor(Math.random() * PANGRAM_SEEDS.length)];
-  const letters = [...new Set(seed)];
+  // Fallback: relax both the word-count filter and (last) the exclude set.
+  // Tries unexcluded seeds first; if still nothing, accepts any seed.
+  const fallbackSeed = (() => {
+    for (let k = 0; k < 50; k++) {
+      const s = PANGRAM_SEEDS[Math.floor(Math.random() * PANGRAM_SEEDS.length)];
+      if (!exclude.has(s)) return s;
+    }
+    return PANGRAM_SEEDS[Math.floor(Math.random() * PANGRAM_SEEDS.length)];
+  })();
+  const letters = [...new Set(fallbackSeed)];
   const center = pickWeightedCenter(letters);
   const letterSet = new Set(letters);
   const validList = findValidWords(letterSet, center);
@@ -103,6 +117,7 @@ export function generatePuzzle(attempts = 50): Puzzle {
     validWords: new Set(validList),
     pangrams: validList.filter((w) => new Set(w).size === 7),
     bonusLetter,
+    seedWord: fallbackSeed,
   };
 }
 

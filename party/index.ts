@@ -67,6 +67,9 @@ export default class WordHiveServer implements Party.Server {
   // Every word found across all rounds, per player. Used to compute each
   // player's top 10 highest-scoring words at FINAL_RESULTS.
   private allWordsByPlayer = new Map<string, ScoredWord[]>();
+  // Rolling buffer of recent pangram seeds so the same one doesn't repeat
+  // within a short window in the same room. Resets when the room idles out.
+  private recentSeeds: string[] = [];
   // word -> definition (or null if API confirmed no entry). Persists across
   // rounds in a given room; pangrams repeat often enough that this saves work.
   // Pre-populated from build-time pangram-defs.json so seed pangrams render
@@ -256,7 +259,10 @@ export default class WordHiveServer implements Party.Server {
   // to look up at the puzzle.
   private beginCountdown() {
     this.currentRound += 1;
-    this.puzzle = generatePuzzle();
+    this.puzzle = generatePuzzle({ exclude: new Set(this.recentSeeds) });
+    this.recentSeeds.unshift(this.puzzle.seedWord);
+    const MAX_RECENT = 50;
+    if (this.recentSeeds.length > MAX_RECENT) this.recentSeeds.length = MAX_RECENT;
     this.foundByPlayer.clear();
     this.firstFinder.clear();
     this.roundSummary = null;
