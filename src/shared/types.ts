@@ -133,7 +133,8 @@ export type ClientMessage =
   | { type: "playAgain" }
   | { type: "skipWait" } // host: resume even if some players are still disconnected
   | { type: "togglePause" } // any player can pause/resume an active round
-  | { type: "resetGame" }; // bail back to LOBBY from any in-game phase
+  | { type: "resetGame" } // bail back to LOBBY of this game
+  | { type: "switchGames" }; // host: kick everyone back to the pre-game picker
 
 export type SubmitReason =
   | "too_short"
@@ -156,4 +157,5 @@ export type ServerMessage =
       isPangram?: boolean;
       firstFinder?: boolean;
     }
+  | { type: "switchGames" }
   | { type: "error"; message: string };

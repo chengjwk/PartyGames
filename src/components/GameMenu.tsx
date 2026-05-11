@@ -4,12 +4,16 @@ import type { ClientMessage, PublicGameState } from "../shared/types";
 interface GameMenuProps {
   state: PublicGameState;
   send: (msg: ClientMessage) => void;
+  // True if the viewer is currently the host player (or has host conn).
+  // Switch-game is host-only because it affects every connected device.
+  isHost?: boolean;
 }
 
-// Two floating buttons in the top-left: Pause/Resume (only during play) and
-// Stop (always in-game). Stop opens a confirm dialog before resetting.
-export default function GameMenu({ state, send }: GameMenuProps) {
+// Floating top-left buttons: Pause/Resume (during play) + Stop (any in-game
+// phase) + Switch (host only — kicks everyone back to the cross-game lobby).
+export default function GameMenu({ state, send, isHost = true }: GameMenuProps) {
   const [confirmStop, setConfirmStop] = useState(false);
+  const [confirmSwitch, setConfirmSwitch] = useState(false);
 
   if (state.phase === "LOBBY") return null;
   const canPause = state.phase === "ROUND_PLAYING";
@@ -24,6 +28,7 @@ export default function GameMenu({ state, send }: GameMenuProps) {
           zIndex: 10,
           display: "flex",
           gap: 8,
+          flexWrap: "wrap",
         }}
       >
         {canPause && (
@@ -50,10 +55,24 @@ export default function GameMenu({ state, send }: GameMenuProps) {
           <StopIcon />
           <span style={labelStyle}>Stop</span>
         </button>
+        {isHost && (
+          <button
+            onClick={() => setConfirmSwitch(true)}
+            aria-label="Switch game"
+            title="Back to game picker"
+            style={controlButtonStyle}
+          >
+            <SwitchIcon />
+            <span style={labelStyle}>Switch</span>
+          </button>
+        )}
       </div>
 
       {confirmStop && (
-        <ConfirmStop
+        <ConfirmDialog
+          title="Stop the game?"
+          body="This ends the round and returns everyone to the lobby. Scores and words will be cleared."
+          danger
           onCancel={() => setConfirmStop(false)}
           onConfirm={() => {
             send({ type: "resetGame" });
@@ -61,16 +80,33 @@ export default function GameMenu({ state, send }: GameMenuProps) {
           }}
         />
       )}
+      {confirmSwitch && (
+        <ConfirmDialog
+          title="Switch games?"
+          body="This ends the current game for everyone and goes back to the game picker."
+          onCancel={() => setConfirmSwitch(false)}
+          onConfirm={() => {
+            send({ type: "switchGames" });
+            setConfirmSwitch(false);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function ConfirmStop({
+function ConfirmDialog({
+  title,
+  body,
   onCancel,
   onConfirm,
+  danger,
 }: {
+  title: string;
+  body: string;
   onCancel: () => void;
   onConfirm: () => void;
+  danger?: boolean;
 }) {
   return (
     <div
@@ -99,11 +135,8 @@ function ConfirmStop({
           gap: 14,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 20 }}>Stop the game?</h2>
-        <p style={{ margin: 0, color: "var(--muted)" }}>
-          This ends the round and returns everyone to the lobby. Scores and
-          words will be cleared.
-        </p>
+        <h2 style={{ margin: 0, fontSize: 20 }}>{title}</h2>
+        <p style={{ margin: 0, color: "var(--muted)" }}>{body}</p>
         <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
           <button
             onClick={onCancel}
@@ -123,11 +156,11 @@ function ConfirmStop({
               flex: 1,
               fontSize: 16,
               padding: 14,
-              background: "#c04040",
-              color: "#fff",
+              background: danger ? "#c04040" : "var(--accent)",
+              color: danger ? "#fff" : "var(--accent-fg)",
             }}
           >
-            Stop game
+            Confirm
           </button>
         </div>
       </div>
@@ -175,6 +208,18 @@ function StopIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <rect x="6" y="6" width="12" height="12" rx="1.5" />
+    </svg>
+  );
+}
+
+function SwitchIcon() {
+  // Two arrows swapping — back to picker / change games.
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m17 3 4 4-4 4" />
+      <path d="M21 7H9" />
+      <path d="m7 21-4-4 4-4" />
+      <path d="M3 17h12" />
     </svg>
   );
 }

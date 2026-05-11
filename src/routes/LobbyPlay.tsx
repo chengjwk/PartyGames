@@ -5,7 +5,7 @@
 // localStorage and auto-rejoins as the same player.
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import PartySocket from "partysocket";
 import { PARTY_HOST } from "../config";
 import { getClientId } from "../lib/clientId";
@@ -27,6 +27,8 @@ const AVATAR_KEY = "wordhive.avatar";
 export default function LobbyPlay() {
   const { room } = useParams<{ room: string }>();
   const roomCode = (room ?? "").toUpperCase();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const wantsReset = searchParams.has("reset");
   const nav = useNavigate();
 
   const [state, setState] = useState<LobbyState | null>(null);
@@ -38,6 +40,7 @@ export default function LobbyPlay() {
   );
   const [joined, setJoined] = useState(false);
   const autoJoinedRef = useRef(false);
+  const [resetSent, setResetSent] = useState(false);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -82,14 +85,27 @@ export default function LobbyPlay() {
     }
   }, [state, joined, clientId]);
 
+  // Coming back from a running game with ?reset=1: clear the lobby's
+  // chosenGame so we land on the picker rather than auto-bouncing back.
+  useEffect(() => {
+    if (wantsReset && state && !resetSent) {
+      socketRef.current?.send(JSON.stringify({ type: "resetChoice" }));
+      setResetSent(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("reset");
+      setSearchParams(next, { replace: true });
+    }
+  }, [wantsReset, state, resetSent, searchParams, setSearchParams]);
+
   // When the host picks a game, hop to that game's play page. Same clientId
   // + name + avatar are in localStorage, so the game party auto-rejoins us
   // without re-entry.
   useEffect(() => {
+    if (wantsReset && !resetSent) return;
     if (state?.chosenGame) {
       nav(`/play/${state.chosenGame}/${roomCode}`, { replace: true });
     }
-  }, [state?.chosenGame, roomCode, nav]);
+  }, [state?.chosenGame, roomCode, nav, wantsReset, resetSent]);
 
   if (!state) {
     return (

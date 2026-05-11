@@ -130,6 +130,9 @@ export default class MathHiveServer implements Party.Server {
       case "resetGame":
         this.handleResetGame();
         return;
+      case "switchGames":
+        if (this.isHost(sender)) this.handleSwitchGames();
+        return;
     }
   }
 
@@ -477,6 +480,11 @@ export default class MathHiveServer implements Party.Server {
     if (this.phase !== "ROUND_PLAYING") return;
     if (this.paused) this.resume();
     else this.doPause();
+  }
+
+  private handleSwitchGames() {
+    this.handleResetGame();
+    this.room.broadcast(JSON.stringify({ type: "switchGames" } satisfies MathServerMessage));
   }
 
   private handleResetGame() {

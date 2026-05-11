@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useRoomSocket, type SubmitFeedback } from "../lib/useRoomSocket";
 import { getClientId } from "../lib/clientId";
 import { sounds } from "../lib/sounds";
@@ -28,7 +28,11 @@ const AVATAR_KEY = "wordhive.avatar";
 export default function Play() {
   const { room } = useParams<{ room: string }>();
   const roomCode = (room ?? "").toUpperCase();
-  const { state, privateState, lastSubmit, send } = useRoomSocket(roomCode, "player");
+  const { state, privateState, lastSubmit, send, switchAt } = useRoomSocket(roomCode, "player");
+  const nav = useNavigate();
+  useEffect(() => {
+    if (switchAt) nav(`/play/${roomCode}?reset=1`, { replace: true });
+  }, [switchAt, roomCode, nav]);
   const [clientId] = useState(getClientId);
   const [name, setName] = useState(
     () => localStorage.getItem(NAME_KEY) ?? randomName(),
@@ -52,12 +56,14 @@ export default function Play() {
     if (autoJoinedRef.current || joined) return;
     if (!state) return;
     const existing = state.players.find((p) => p.id === clientId);
+    const savedName = localStorage.getItem(NAME_KEY);
     if (existing) {
       autoJoinedRef.current = true;
       join(existing.name, existing.avatar);
-    } else if (state.phase !== "LOBBY" && localStorage.getItem(NAME_KEY)) {
+    } else if (savedName) {
+      // Have a saved name (typically from the pre-game lobby) — just join.
       autoJoinedRef.current = true;
-      join(localStorage.getItem(NAME_KEY) ?? randomName(), avatar);
+      join(savedName, avatar);
     }
   }, [state, joined, clientId]);
 
@@ -136,7 +142,7 @@ export default function Play() {
     <>
       <GardenBackground />
       <FullscreenButton />
-      <GameMenu state={state} send={send} />
+      <GameMenu state={state} send={send} isHost={isHost} />
       {view}
       {state.paused && (
         <PausedOverlay

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import PartySocket from "partysocket";
 import { PARTY_HOST } from "../config";
@@ -22,6 +22,7 @@ const ACCENT_FG = "#0a1a2a";
 
 function useMathRoomSocket(roomCode: string) {
   const [state, setState] = useState<MathPublicGameState | null>(null);
+  const [switchAt, setSwitchAt] = useState<number | null>(null);
   const socketRef = useRef<PartySocket | null>(null);
   useEffect(() => {
     if (!roomCode) return;
@@ -34,6 +35,7 @@ function useMathRoomSocket(roomCode: string) {
     const onMsg = (e: MessageEvent) => {
       const msg = JSON.parse(e.data) as MathServerMessage;
       if (msg.type === "state") setState(msg.state);
+      else if (msg.type === "switchGames") setSwitchAt(Date.now());
     };
     socket.addEventListener("message", onMsg);
     socketRef.current = socket;
@@ -45,13 +47,17 @@ function useMathRoomSocket(roomCode: string) {
   const send = (msg: MathClientMessage) => {
     socketRef.current?.send(JSON.stringify(msg));
   };
-  return { state, send };
+  return { state, send, switchAt };
 }
 
 export default function MathHost() {
   const { room } = useParams<{ room: string }>();
   const roomCode = (room ?? "").toUpperCase();
-  const { state, send } = useMathRoomSocket(roomCode);
+  const { state, send, switchAt } = useMathRoomSocket(roomCode);
+  const nav = useNavigate();
+  useEffect(() => {
+    if (switchAt) nav(`/host/${roomCode}?reset=1`, { replace: true });
+  }, [switchAt, roomCode, nav]);
 
   if (!state) {
     return (
@@ -89,7 +95,7 @@ export default function MathHost() {
     <>
       <GardenBackground />
       <FullscreenButton />
-      <GameMenu state={stateForMenu} send={send as unknown as (m: unknown) => void as never} />
+      <GameMenu state={stateForMenu} send={send as unknown as (m: unknown) => void as never} isHost />
       {view}
       {state.paused && (
         <PausedOverlay

@@ -160,6 +160,9 @@ export default class WordHiveServer implements Party.Server {
       case "resetGame":
         this.handleResetGame();
         return;
+      case "switchGames":
+        if (this.isHost(sender)) this.handleSwitchGames();
+        return;
     }
   }
 
@@ -806,6 +809,14 @@ export default class WordHiveServer implements Party.Server {
     } else {
       this.doPause();
     }
+  }
+
+  // Host hit "Switch game" in the in-game menu. Reset the room (so
+  // nothing leaks if anyone returns later) and tell every client to
+  // navigate back to the pre-game picker with ?reset=1.
+  private handleSwitchGames() {
+    this.handleResetGame();
+    this.room.broadcast(JSON.stringify({ type: "switchGames" } satisfies ServerMessage));
   }
 
   // Bail back to lobby from any in-game phase. Players keep their slots

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { useRoomSocket } from "../lib/useRoomSocket";
 import { sounds } from "../lib/sounds";
@@ -15,7 +15,11 @@ import type { ActiveBee, PublicGameState, RoundConfig, RoundSummary } from "../s
 export default function Host() {
   const { room } = useParams<{ room: string }>();
   const roomCode = (room ?? "").toUpperCase();
-  const { state, send } = useRoomSocket(roomCode, "host");
+  const { state, send, switchAt } = useRoomSocket(roomCode, "host");
+  const nav = useNavigate();
+  useEffect(() => {
+    if (switchAt) nav(`/host/${roomCode}?reset=1`, { replace: true });
+  }, [switchAt, roomCode, nav]);
   usePhaseAudio(state?.phase);
   // Pre-round 3-2-1 ticks (countdown before the round starts).
   useTickAudio(state?.phase === "ROUND_STARTING" ? state.roundStartsAt : null);
@@ -48,7 +52,7 @@ export default function Host() {
     <>
       <GardenBackground />
       <FullscreenButton />
-      <GameMenu state={state} send={send} />
+      <GameMenu state={state} send={send} isHost />
       {view}
       {state.paused && (
         <PausedOverlay

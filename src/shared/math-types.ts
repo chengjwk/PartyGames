@@ -69,7 +69,8 @@ export type MathClientMessage =
   | { type: "playAgain" }
   | { type: "skipWait" }
   | { type: "togglePause" }
-  | { type: "resetGame" };
+  | { type: "resetGame" }
+  | { type: "switchGames" };
 
 export type MathSubmitReason =
   | "too_short"
@@ -96,4 +97,5 @@ export type MathServerMessage =
       pangram?: boolean;
       firstFinder?: boolean;
     }
+  | { type: "switchGames" }
   | { type: "error"; message: string };

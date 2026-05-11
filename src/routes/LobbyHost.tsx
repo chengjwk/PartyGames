@@ -4,7 +4,7 @@
 // to the chosen game's host page.
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import PartySocket from "partysocket";
 import { PARTY_HOST } from "../config";
@@ -19,8 +19,11 @@ import type {
 export default function LobbyHost() {
   const { room } = useParams<{ room: string }>();
   const roomCode = (room ?? "").toUpperCase();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const wantsReset = searchParams.has("reset");
   const nav = useNavigate();
   const [state, setState] = useState<LobbyState | null>(null);
+  const [resetSent, setResetSent] = useState(false);
   const socketRef = useRef<PartySocket | null>(null);
 
   useEffect(() => {
@@ -43,13 +46,27 @@ export default function LobbyHost() {
     };
   }, [roomCode]);
 
-  // When the host picks a game, navigate every viewer (including this TV)
-  // to that game's host page.
+  // Coming back from a running game with ?reset=1: clear the lobby's
+  // chosenGame so we land on the picker, not auto-bounce to the game.
   useEffect(() => {
+    if (wantsReset && state && !resetSent) {
+      socketRef.current?.send(JSON.stringify({ type: "resetChoice" }));
+      setResetSent(true);
+      // Strip the param so a refresh doesn't keep resetting.
+      const next = new URLSearchParams(searchParams);
+      next.delete("reset");
+      setSearchParams(next, { replace: true });
+    }
+  }, [wantsReset, state, resetSent, searchParams, setSearchParams]);
+
+  // When the host picks a game, navigate every viewer (including this TV)
+  // to that game's host page. Skip while we're still flushing a reset.
+  useEffect(() => {
+    if (wantsReset && !resetSent) return;
     if (state?.chosenGame) {
       nav(`/host/${state.chosenGame}/${roomCode}`, { replace: true });
     }
-  }, [state?.chosenGame, roomCode, nav]);
+  }, [state?.chosenGame, roomCode, nav, wantsReset, resetSent]);
 
   const playUrl = `${window.location.origin}/play/${roomCode}`;
 

@@ -22,6 +22,7 @@ export interface RoomSocket {
   state: PublicGameState | null;
   privateState: PrivatePlayerState | null;
   lastSubmit: SubmitFeedback | null;
+  switchAt: number | null; // epoch ms when the server told us to navigate back to the lobby picker
   send: (msg: ClientMessage) => void;
 }
 
@@ -33,6 +34,7 @@ export function useRoomSocket(
   const [state, setState] = useState<PublicGameState | null>(null);
   const [privateState, setPrivateState] = useState<PrivatePlayerState | null>(null);
   const [lastSubmit, setLastSubmit] = useState<SubmitFeedback | null>(null);
+  const [switchAt, setSwitchAt] = useState<number | null>(null);
   const socketRef = useRef<PartySocket | null>(null);
 
   useEffect(() => {
@@ -63,6 +65,9 @@ export function useRoomSocket(
             at: Date.now(),
           });
           break;
+        case "switchGames":
+          setSwitchAt(Date.now());
+          break;
       }
     };
     socket.addEventListener("message", onMsg);
@@ -78,5 +83,5 @@ export function useRoomSocket(
     socketRef.current?.send(JSON.stringify(msg));
   };
 
-  return { state, privateState, lastSubmit, send };
+  return { state, privateState, lastSubmit, switchAt, send };
 }

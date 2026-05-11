@@ -22,7 +22,8 @@ export type LobbyClientMessage =
   | { type: "join"; name: string; avatar: string; clientId: string }
   | { type: "rename"; name: string }
   | { type: "setAvatar"; avatar: string }
-  | { type: "pickGame"; game: LobbyGame };
+  | { type: "pickGame"; game: LobbyGame }
+  | { type: "resetChoice" };
 
 export type LobbyServerMessage =
   | { type: "you"; playerId: string }
@@ -80,6 +81,14 @@ export default class LobbyServer implements Party.Server {
       case "pickGame":
         if (this.isHost(sender) && !this.chosenGame) {
           this.chosenGame = msg.game;
+          this.broadcastState();
+        }
+        return;
+      case "resetChoice":
+        // Anyone can ask to reset — used when navigating back from a game
+        // to the picker (?reset=1 in the URL triggers this on connect).
+        if (this.chosenGame !== null) {
+          this.chosenGame = null;
           this.broadcastState();
         }
         return;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { getClientId } from "../lib/clientId";
 import { sounds } from "../lib/sounds";
 import { randomName } from "../lib/randomName";
@@ -36,6 +36,7 @@ const OP_INTERNAL: Record<string, string> = { "+": "+", "−": "-", "×": "*", "
 function useMathRoomSocket(roomCode: string, role: "host" | "player") {
   const [state, setState] = useState<MathPublicGameState | null>(null);
   const [privateState, setPrivateState] = useState<MathPrivatePlayerState | null>(null);
+  const [switchAt, setSwitchAt] = useState<number | null>(null);
   const [lastSubmit, setLastSubmit] = useState<{
     equation: string;
     ok: boolean;
@@ -75,6 +76,9 @@ function useMathRoomSocket(roomCode: string, role: "host" | "player") {
             at: Date.now(),
           });
           break;
+        case "switchGames":
+          setSwitchAt(Date.now());
+          break;
       }
     };
     socket.addEventListener("message", onMsg);
@@ -89,13 +93,17 @@ function useMathRoomSocket(roomCode: string, role: "host" | "player") {
   const send = (msg: MathClientMessage) => {
     socketRef.current?.send(JSON.stringify(msg));
   };
-  return { state, privateState, lastSubmit, send };
+  return { state, privateState, lastSubmit, switchAt, send };
 }
 
 export default function MathPlay() {
   const { room } = useParams<{ room: string }>();
   const roomCode = (room ?? "").toUpperCase();
-  const { state, privateState, lastSubmit, send } = useMathRoomSocket(roomCode, "player");
+  const { state, privateState, lastSubmit, send, switchAt } = useMathRoomSocket(roomCode, "player");
+  const nav = useNavigate();
+  useEffect(() => {
+    if (switchAt) nav(`/play/${roomCode}?reset=1`, { replace: true });
+  }, [switchAt, roomCode, nav]);
   const [clientId] = useState(getClientId);
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? randomName());
   const [avatar, setAvatar] = useState(
@@ -116,12 +124,13 @@ export default function MathPlay() {
   useEffect(() => {
     if (autoJoinedRef.current || joined || !state) return;
     const existing = state.players.find((p) => p.id === clientId);
+    const savedName = localStorage.getItem(NAME_KEY);
     if (existing) {
       autoJoinedRef.current = true;
       join(existing.name, existing.avatar);
-    } else if (state.phase !== "LOBBY" && localStorage.getItem(NAME_KEY)) {
+    } else if (savedName) {
       autoJoinedRef.current = true;
-      join(localStorage.getItem(NAME_KEY) ?? randomName(), avatar);
+      join(savedName, avatar);
     }
   }, [state, joined, clientId]);
 
@@ -199,7 +208,7 @@ export default function MathPlay() {
     <>
       <GardenBackground />
       <FullscreenButton />
-      <GameMenu state={stateForMenu} send={send as unknown as (m: unknown) => void as never} />
+      <GameMenu state={stateForMenu} send={send as unknown as (m: unknown) => void as never} isHost={isHost} />
       {view}
       {state.paused && (
         <PausedOverlay
