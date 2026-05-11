@@ -259,14 +259,10 @@ function RoundPlaying({ state }: { state: MathPublicGameState }) {
           <div style={{ color: "var(--muted)", fontSize: 18 }}>Round {state.currentRound} of {state.config.totalRounds}</div>
           <Timer endsAt={state.roundEndsAt} />
           <div style={{ marginTop: 24 }}>
-            <DigitHoneycomb digits={puzzle.digits} />
-          </div>
-          <div style={{ marginTop: 20, display: "flex", gap: 12 }}>
-            {["+", "−", "×", "÷"].map((op) => (
-              <div key={op} style={{ fontSize: 36, fontWeight: 800, color: ACCENT, padding: "8px 16px", background: "var(--bg-elev)", borderRadius: 10 }}>
-                {op}
-              </div>
-            ))}
+            <DigitHoneycomb
+              centerOperator={puzzle.centerOperator}
+              outerDigits={puzzle.outerDigits}
+            />
           </div>
         </section>
         <section style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
@@ -310,8 +306,15 @@ function RoundPlaying({ state }: { state: MathPublicGameState }) {
   );
 }
 
-function DigitHoneycomb({ digits }: { digits: string[] }) {
-  const [center, ...outer] = digits;
+const OP_GLYPH: Record<string, string> = { "+": "+", "-": "−", "*": "×", "/": "÷" };
+
+function DigitHoneycomb({
+  centerOperator,
+  outerDigits,
+}: {
+  centerOperator: string;
+  outerDigits: string[];
+}) {
   const HEX_R = 70;
   const HEX_W = HEX_R * Math.sqrt(3);
   const D = HEX_W;
@@ -320,9 +323,11 @@ function DigitHoneycomb({ digits }: { digits: string[] }) {
     <svg width={ext * 2} height={ext * 2} viewBox={`${-ext} ${-ext} ${ext * 2} ${ext * 2}`}>
       <g>
         <polygon points={hexPoints(HEX_R)} fill={ACCENT} stroke="var(--border)" strokeWidth={2} />
-        <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={HEX_R * 0.95} fontWeight={800} fill={ACCENT_FG}>{center}</text>
+        <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={HEX_R * 1.1} fontWeight={800} fill={ACCENT_FG}>
+          {OP_GLYPH[centerOperator] ?? centerOperator}
+        </text>
       </g>
-      {outer.map((d, i) => {
+      {outerDigits.map((d, i) => {
         const angle = (Math.PI / 3) * i - Math.PI / 2;
         const x = D * Math.cos(angle);
         const y = D * Math.sin(angle);

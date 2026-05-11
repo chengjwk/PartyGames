@@ -26,6 +26,10 @@ import { PARTY_HOST } from "../config";
 const NAME_KEY = "wordhive.name";
 const AVATAR_KEY = "wordhive.avatar";
 
+// What the player sees on the center hex vs what we store/send.
+const OP_DISPLAY: Record<string, string> = { "+": "+", "-": "−", "*": "×", "/": "÷" };
+const OP_INTERNAL: Record<string, string> = { "+": "+", "−": "-", "×": "*", "÷": "/" };
+
 // MathHive uses its own message/state shape, so we drive the WebSocket
 // directly here rather than via useRoomSocket (which is typed for word
 // state). Same pattern, different types.
@@ -495,13 +499,15 @@ function Round({
     );
   }
 
-  const center = puzzle.digits[0];
-  const outer = puzzle.digits.slice(1);
-  const displayLetters = [center, ...outer];
+  const opGlyph = OP_DISPLAY[puzzle.centerOperator];
+  const displayLetters = [opGlyph, ...puzzle.outerDigits];
 
   const tap = (s: string) => {
     if (tokens.length >= 32) return;
-    setTokens((arr) => [...arr, s]);
+    // Honeycomb shows the operator display glyph (× ÷ −) — map back to the
+    // internal token form used by the validator and stored on the wire.
+    const internal = OP_INTERNAL[s] ?? s;
+    setTokens((arr) => [...arr, internal]);
   };
   const backspace = () => setTokens((arr) => arr.slice(0, -1));
   const clear = () => setTokens([]);
@@ -559,30 +565,19 @@ function Round({
         size={Math.min(window.innerWidth - 32, 380)}
         bees={state.bees}
       />
-      <div style={{ display: "flex", gap: 6, width: "100%" }}>
-        {(["+", "-", "*", "/"] as const).map((op) => (
-          <button
-            key={op}
-            onClick={() => tap(op)}
-            style={{ flex: 1, fontSize: 24, padding: "16px 0", background: "var(--bg-elev)", color: "var(--fg)", fontWeight: 700 }}
-          >
-            {op === "*" ? "×" : op === "/" ? "÷" : op}
-          </button>
-        ))}
+      <div style={{ display: "flex", gap: 8, width: "100%" }}>
+        <button onClick={backspace} disabled={!tokens.length} style={{ flex: 1, fontSize: 16, padding: "16px 0", background: "var(--bg-elev)", color: "var(--fg)" }}>
+          Delete
+        </button>
+        <button onClick={clear} disabled={!tokens.length} style={{ flex: 1, fontSize: 16, padding: "16px 0", background: "var(--bg-elev)", color: "var(--fg)" }}>
+          Clear
+        </button>
         <button
           onClick={insertEquals}
           disabled={tokens.includes("=") || tokens.length === 0}
-          style={{ flex: 1, fontSize: 24, padding: "16px 0", background: "#6aa6ff", color: "#0a1a2a", fontWeight: 800 }}
+          style={{ flex: 1, fontSize: 26, padding: "16px 0", background: "#6aa6ff", color: "#0a1a2a", fontWeight: 800 }}
         >
           =
-        </button>
-      </div>
-      <div style={{ display: "flex", gap: 8, width: "100%" }}>
-        <button onClick={backspace} disabled={!tokens.length} style={{ flex: 1, fontSize: 14, padding: "10px 0", background: "var(--bg-elev)", color: "var(--fg)" }}>
-          Delete
-        </button>
-        <button onClick={clear} disabled={!tokens.length} style={{ flex: 1, fontSize: 14, padding: "10px 0", background: "var(--bg-elev)", color: "var(--fg)" }}>
-          Clear
         </button>
       </div>
       <button

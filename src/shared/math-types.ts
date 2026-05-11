@@ -9,8 +9,8 @@ import type { Player, RoundConfig, ActiveBee, Phase, GameStats } from "./types";
 export type MathOperator = "+" | "-" | "*" | "/";
 
 export interface MathPuzzlePublic {
-  digits: string[]; // 7 single-digit strings; index 0 = center, 1..6 outer
-  // operators are always {+, -, *, /} so no need to ship them
+  centerOperator: MathOperator; // the single allowed operator for this round
+  outerDigits: string[]; // length 6
 }
 
 export interface ScoredEquation {

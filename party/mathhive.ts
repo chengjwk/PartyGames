@@ -272,7 +272,7 @@ export default class MathHiveServer implements Party.Server {
       const all = this.allEquationsByPlayer.get(r.playerId) ?? [];
       this.allEquationsByPlayer.set(r.playerId, [...all, ...r.equations]);
     }
-    this.roundSummary = { digits: this.puzzle.digits, perPlayer };
+    this.roundSummary = { digits: this.puzzle.outerDigits, perPlayer };
     this.roundEndsAt = null;
     this.phase = "ROUND_RESULTS";
     this.broadcastState();
@@ -361,12 +361,16 @@ export default class MathHiveServer implements Party.Server {
     // Classic: bee letter usage gives a 2x multiplier. Swarm: bee multipliers
     // (not implemented yet for math — punt to "skip swarm in math v1").
     const usedBee = [...result.digitChars].some(
-      (d) => !this.puzzle!.digitMultiset.has(d),
+      (d) => !this.puzzle!.digitSet.has(d),
     );
     let m = 1;
     if (usedBee) m *= 2;
     m *= playerMult;
-    const base = scoreEquation({ validation: result, firstFinder: isFirst });
+    const base = scoreEquation({
+      validation: result,
+      puzzle: this.puzzle,
+      firstFinder: isFirst,
+    });
     const scored: ScoredEquation = {
       ...base,
       points: Math.round(base.points * m),
@@ -580,7 +584,7 @@ export default class MathHiveServer implements Party.Server {
     if (!this.puzzle) return null;
     const digits = "0123456789".split("");
     const taken = new Set([
-      ...this.puzzle.digitMultiset.keys(),
+      ...this.puzzle.digitSet,
       ...this.bees.map((b) => b.letter),
     ]);
     const free = digits.filter((d) => !taken.has(d));
@@ -646,7 +650,12 @@ export default class MathHiveServer implements Party.Server {
       hostPlayerId: this.hostPlayerId,
       currentRound: this.currentRound,
       totalScores: Object.fromEntries(this.totalScores),
-      puzzle: this.puzzle ? { digits: this.puzzle.digits } : null,
+      puzzle: this.puzzle
+        ? {
+            centerOperator: this.puzzle.centerOperator,
+            outerDigits: this.puzzle.outerDigits,
+          }
+        : null,
       roundStartsAt: this.roundStartsAt,
       roundEndsAt: this.roundEndsAt,
       roundSummary: this.roundSummary,
