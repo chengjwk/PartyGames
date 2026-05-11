@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import type { ActiveBee } from "../shared/types";
 
 interface HoneycombProps {
   letters: string[]; // [center, ...6 outer]
   onTap: (letter: string) => void;
   size?: number;
-  bonusLetter?: string; // outer letter that scores 2x
-  beeLetter?: string | null; // outer letter currently boosted by a bee (15s)
+  bonusLetter?: string; // classic only: outer letter that scores 2x
+  bees?: ActiveBee[]; // active bees (mode-dependent rendering)
 }
 
 const HEX_RADIUS = 1;
@@ -23,7 +24,7 @@ const OUTER_OFFSETS = Array.from({ length: 6 }, (_, i) => {
   return [d * Math.cos(angle), d * Math.sin(angle)] as const;
 });
 
-export default function Honeycomb({ letters, onTap, size = 320, bonusLetter, beeLetter }: HoneycombProps) {
+export default function Honeycomb({ letters, onTap, size = 320, bonusLetter, bees }: HoneycombProps) {
   const center = letters[0];
   const outer = letters.slice(1, 7);
   const extent = Math.sqrt(3) + HEX_RADIUS + 0.5;
@@ -35,23 +36,32 @@ export default function Honeycomb({ letters, onTap, size = 320, bonusLetter, bee
   const vb = `${vbX} ${vbY} ${vbW} ${vbH}`;
   const topOuter = OUTER_OFFSETS[0];
 
-  // Keep the bee mounted while it animates out. `displayed` is the letter we
-  // currently render; `exiting` plays the fly-out then unmounts.
-  const [displayed, setDisplayed] = useState<string | null>(beeLetter ?? null);
+  const beesArr = bees ?? [];
+  // Floating 8th-letter (classic only): slot === -1
+  const floater = beesArr.find((b) => b.slot === -1) ?? null;
+  // Swarm: bees on outer slots (1-6) or center (0, queen).
+  const beeByOuterSlot = new Map<number, ActiveBee>();
+  for (const b of beesArr) {
+    if (b.slot >= 1 && b.slot <= 6) beeByOuterSlot.set(b.slot, b);
+  }
+  const queenBee = beesArr.find((b) => b.slot === 0) ?? null;
+
+  // Mount-exit fade for the floating bee (classic mode).
+  const [displayedFloat, setDisplayedFloat] = useState<string | null>(floater?.letter ?? null);
   const [exiting, setExiting] = useState(false);
   useEffect(() => {
-    if (beeLetter && beeLetter !== displayed) {
-      setDisplayed(beeLetter);
+    if (floater && floater.letter !== displayedFloat) {
+      setDisplayedFloat(floater.letter);
       setExiting(false);
-    } else if (!beeLetter && displayed && !exiting) {
+    } else if (!floater && displayedFloat && !exiting) {
       setExiting(true);
       const t = setTimeout(() => {
-        setDisplayed(null);
+        setDisplayedFloat(null);
         setExiting(false);
       }, 700);
       return () => clearTimeout(t);
     }
-  }, [beeLetter, displayed, exiting]);
+  }, [floater, displayedFloat, exiting]);
 
   return (
     <svg
@@ -76,16 +86,47 @@ export default function Honeycomb({ letters, onTap, size = 320, bonusLetter, bee
           50% { transform: translate(0, -0.06px); }
         }
       `}</style>
-      <Hex cx={0} cy={0} letter={center} fill="var(--accent)" textFill="var(--accent-fg)" onTap={onTap} />
-      {outer.map((letter, i) => {
+      {queenBee ? (
+        <Hex
+          cx={0}
+          cy={0}
+          letter={queenBee.letter}
+          fill="var(--accent)"
+          textFill="var(--accent-fg)"
+          badge="5×"
+          badgeColor="#1a1a1f"
+          beeOverlay="queen"
+          onTap={onTap}
+        />
+      ) : (
+        <Hex cx={0} cy={0} letter={center} fill="var(--accent)" textFill="var(--accent-fg)" onTap={onTap} />
+      )}
+      {outer.map((origLetter, i) => {
         const [dx, dy] = OUTER_OFFSETS[i];
-        const isBonus = bonusLetter === letter;
+        const bee = beeByOuterSlot.get(i + 1);
+        if (bee) {
+          return (
+            <Hex
+              key={`bee-${i}-${bee.letter}`}
+              cx={dx}
+              cy={dy}
+              letter={bee.letter}
+              fill="var(--accent)"
+              textFill="var(--accent-fg)"
+              badge={`${bee.multiplier}×`}
+              badgeColor="#1a1a1f"
+              beeOverlay="worker"
+              onTap={onTap}
+            />
+          );
+        }
+        const isBonus = bonusLetter === origLetter;
         return (
           <Hex
-            key={`${letter}-${i}`}
+            key={`${origLetter}-${i}`}
             cx={dx}
             cy={dy}
-            letter={letter}
+            letter={origLetter}
             fill={isBonus ? "#3a3a18" : "var(--bg-elev)"}
             textFill="var(--fg)"
             badge={isBonus ? "2×" : null}
@@ -93,11 +134,11 @@ export default function Honeycomb({ letters, onTap, size = 320, bonusLetter, bee
           />
         );
       })}
-      {displayed && (
+      {displayedFloat && (
         <BeeLetter
           cx={topOuter[0]}
           cy={topOuter[1] - 1.55}
-          letter={displayed}
+          letter={displayedFloat}
           exiting={exiting}
           onTap={onTap}
         />
@@ -113,10 +154,12 @@ interface HexProps {
   fill: string;
   textFill: string;
   badge?: string | null;
+  badgeColor?: string; // override badge color (default = accent)
+  beeOverlay?: "worker" | "queen" | null; // small bee icon in the corner
   onTap: (letter: string) => void;
 }
 
-function Hex({ cx, cy, letter, fill, textFill, badge, onTap }: HexProps) {
+function Hex({ cx, cy, letter, fill, textFill, badge, badgeColor, beeOverlay, onTap }: HexProps) {
   const [pressed, setPressed] = useState(false);
   const release = () => setPressed(false);
   return (
@@ -163,11 +206,23 @@ function Hex({ cx, cy, letter, fill, textFill, badge, onTap }: HexProps) {
             textAnchor="middle"
             dominantBaseline="central"
             fontSize={0.32}
-            fontWeight={700}
-            fill="var(--accent)"
+            fontWeight={800}
+            fill={badgeColor ?? "var(--accent)"}
             style={{ pointerEvents: "none" }}
           >
             {badge}
+          </text>
+        )}
+        {beeOverlay === "worker" && (
+          <g transform="translate(-0.55 -0.55) scale(-1 1)">
+            <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={0.4} style={{ pointerEvents: "none" }}>
+              🐝
+            </text>
+          </g>
+        )}
+        {beeOverlay === "queen" && (
+          <text x={-0.55} y={-0.55} textAnchor="middle" dominantBaseline="central" fontSize={0.4} style={{ pointerEvents: "none" }}>
+            👑
           </text>
         )}
       </g>

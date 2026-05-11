@@ -344,6 +344,12 @@ function PlayerLobby({
             }}
           >
             <h3 style={{ margin: 0 }}>Settings</h3>
+            <ConfigRow label="Mode">
+              <ModeToggle
+                value={cfg.mode}
+                onChange={(m) => setCfg({ mode: m })}
+              />
+            </ConfigRow>
             <ConfigRow label="Rounds">
               <Stepper
                 value={cfg.totalRounds}
@@ -355,7 +361,7 @@ function PlayerLobby({
             <ConfigRow label="Round duration (sec)">
               <Stepper
                 value={cfg.roundDurationSeconds}
-                min={15}
+                min={cfg.mode === "swarm" ? 60 : 15}
                 max={600}
                 step={15}
                 onChange={(v) => setCfg({ roundDurationSeconds: v })}
@@ -388,6 +394,38 @@ function PlayerLobby({
         </p>
       )}
     </main>
+  );
+}
+
+function ModeToggle({
+  value,
+  onChange,
+}: {
+  value: "classic" | "swarm";
+  onChange: (m: "classic" | "swarm") => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 6, background: "var(--bg)", borderRadius: 8, padding: 4 }}>
+      {(["classic", "swarm"] as const).map((m) => (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          style={{
+            padding: "6px 14px",
+            fontSize: 14,
+            fontWeight: 600,
+            background: value === m ? "var(--accent)" : "transparent",
+            color: value === m ? "var(--accent-fg)" : "var(--fg)",
+            border: "none",
+            borderRadius: 6,
+            cursor: "pointer",
+            textTransform: "capitalize",
+          }}
+        >
+          {m}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -690,7 +728,7 @@ function PlayerRound({
         onTap={tap}
         size={Math.min(window.innerWidth - 32, 380)}
         bonusLetter={puzzle.bonusLetter}
-        beeLetter={state.beeLetter}
+        bees={state.bees}
       />
 
       <div style={{ display: "flex", gap: 8, width: "100%", alignItems: "stretch" }}>

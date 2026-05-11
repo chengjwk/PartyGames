@@ -32,11 +32,14 @@ export function validateWord(
   rawWord: string,
   puzzle: Puzzle,
   extraLetters: Set<string>,
+  centerOverride?: string,
 ): ValidationResult {
   const word = rawWord.toLowerCase().trim();
+  // In swarm mode, the queen bee replaces the center letter requirement.
+  const center = centerOverride ?? puzzle.center;
 
   if (word.length < 3) return { ok: false, reason: "too_short" };
-  if (!word.includes(puzzle.center)) return { ok: false, reason: "missing_center" };
+  if (!word.includes(center)) return { ok: false, reason: "missing_center" };
 
   let usedExtra = false;
   for (let i = 0; i < word.length; i++) {

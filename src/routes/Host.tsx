@@ -10,7 +10,7 @@ import GardenBackground from "../components/GardenBackground";
 import Fireworks from "../components/Fireworks";
 import Avatar from "../components/Avatar";
 import GameMenu from "../components/GameMenu";
-import type { PublicGameState, RoundConfig, RoundSummary } from "../shared/types";
+import type { ActiveBee, PublicGameState, RoundConfig, RoundSummary } from "../shared/types";
 
 export default function Host() {
   const { room } = useParams<{ room: string }>();
@@ -253,6 +253,12 @@ function Lobby({
           }}
         >
           <h3 style={{ margin: 0 }}>Settings</h3>
+          <ConfigRow label="Mode">
+            <ModeToggle
+              value={cfg.mode}
+              onChange={(m) => setCfg({ mode: m })}
+            />
+          </ConfigRow>
           <ConfigRow label="Rounds">
             <Stepper
               value={cfg.totalRounds}
@@ -264,7 +270,7 @@ function Lobby({
           <ConfigRow label="Round duration (sec)">
             <Stepper
               value={cfg.roundDurationSeconds}
-              min={15}
+              min={cfg.mode === "swarm" ? 60 : 15}
               max={600}
               step={15}
               onChange={(v) => setCfg({ roundDurationSeconds: v })}
@@ -289,6 +295,38 @@ function Lobby({
         </button>
       </section>
     </main>
+  );
+}
+
+function ModeToggle({
+  value,
+  onChange,
+}: {
+  value: "classic" | "swarm";
+  onChange: (m: "classic" | "swarm") => void;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 6, background: "var(--bg)", borderRadius: 8, padding: 4 }}>
+      {(["classic", "swarm"] as const).map((m) => (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          style={{
+            padding: "6px 14px",
+            fontSize: 14,
+            fontWeight: 600,
+            background: value === m ? "var(--accent)" : "transparent",
+            color: value === m ? "var(--accent-fg)" : "var(--fg)",
+            border: "none",
+            borderRadius: 6,
+            cursor: "pointer",
+            textTransform: "capitalize",
+          }}
+        >
+          {m}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -354,7 +392,7 @@ function RoundPlaying({ state }: { state: PublicGameState }) {
             <BigHoneycomb
               letters={puzzle.letters}
               bonusLetter={puzzle.bonusLetter}
-              beeLetter={state.beeLetter}
+              bees={state.bees}
             />
           </div>
         </section>
@@ -561,36 +599,44 @@ function BestCard({
 function BigHoneycomb({
   letters,
   bonusLetter,
-  beeLetter,
+  bees,
 }: {
   letters: string[];
   bonusLetter?: string;
-  beeLetter?: string | null;
+  bees?: ActiveBee[];
 }) {
   const [center, ...outer] = letters;
   const HEX_R = 70;
   const HEX_W = HEX_R * Math.sqrt(3);
-  const D = HEX_W; // exact tiling distance — neighbours share full edges
+  const D = HEX_W;
 
   const topX = 0;
   const topY = -D;
 
-  // Mirror the phone-side: keep bee mounted while it animates out.
-  const [displayed, setDisplayed] = useState<string | null>(beeLetter ?? null);
+  const beesArr = bees ?? [];
+  const floater = beesArr.find((b) => b.slot === -1) ?? null;
+  const queen = beesArr.find((b) => b.slot === 0) ?? null;
+  const beeByOuter = new Map<number, ActiveBee>();
+  for (const b of beesArr) {
+    if (b.slot >= 1 && b.slot <= 6) beeByOuter.set(b.slot, b);
+  }
+
+  // Classic floating-bee fade-out.
+  const [displayedFloat, setDisplayedFloat] = useState<string | null>(floater?.letter ?? null);
   const [exiting, setExiting] = useState(false);
   useEffect(() => {
-    if (beeLetter && beeLetter !== displayed) {
-      setDisplayed(beeLetter);
+    if (floater && floater.letter !== displayedFloat) {
+      setDisplayedFloat(floater.letter);
       setExiting(false);
-    } else if (!beeLetter && displayed && !exiting) {
+    } else if (!floater && displayedFloat && !exiting) {
       setExiting(true);
       const t = setTimeout(() => {
-        setDisplayed(null);
+        setDisplayedFloat(null);
         setExiting(false);
       }, 700);
       return () => clearTimeout(t);
     }
-  }, [beeLetter, displayed, exiting]);
+  }, [floater, displayedFloat, exiting]);
 
   const ext = D + HEX_W / 2 + 30;
   const topPad = HEX_R * 2 + 40;
@@ -621,8 +667,14 @@ function BigHoneycomb({
           50% { transform: translateY(-5px); }
         }
       `}</style>
+      {/* Center hex (queen replaces during her window) */}
       <g transform={`translate(0 0)`}>
-        <polygon points={hexPoints(HEX_R)} fill="var(--accent)" stroke="var(--border)" strokeWidth={2} />
+        <polygon
+          points={hexPoints(HEX_R)}
+          fill="var(--accent)"
+          stroke={queen ? "#fff" : "var(--border)"}
+          strokeWidth={queen ? 5 : 2}
+        />
         <text
           x={0}
           y={0}
@@ -633,16 +685,81 @@ function BigHoneycomb({
           fill="var(--accent-fg)"
           style={{ textTransform: "uppercase" }}
         >
-          {center.toUpperCase()}
+          {(queen?.letter ?? center).toUpperCase()}
         </text>
+        {queen && (
+          <>
+            <text
+              x={HEX_R * 0.55}
+              y={-HEX_R * 0.55}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={HEX_R * 0.4}
+              fontWeight={800}
+              fill="#1a1a1f"
+            >
+              5×
+            </text>
+            <text
+              x={-HEX_R * 0.55}
+              y={-HEX_R * 0.55}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={HEX_R * 0.45}
+            >
+              👑
+            </text>
+          </>
+        )}
       </g>
-      {outer.map((letter, i) => {
+      {outer.map((origLetter, i) => {
         const angle = (Math.PI / 3) * i - Math.PI / 2;
         const x = D * Math.cos(angle);
         const y = D * Math.sin(angle);
-        const isBonus = bonusLetter === letter;
+        const bee = beeByOuter.get(i + 1);
+        if (bee) {
+          return (
+            <g key={`bee-${i}-${bee.letter}`} transform={`translate(${x} ${y})`}>
+              <polygon
+                points={hexPoints(HEX_R)}
+                fill="var(--accent)"
+                stroke="var(--accent)"
+                strokeWidth={5}
+              />
+              <text
+                x={0}
+                y={0}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={HEX_R * 0.95}
+                fontWeight={800}
+                fill="var(--accent-fg)"
+                style={{ textTransform: "uppercase" }}
+              >
+                {bee.letter.toUpperCase()}
+              </text>
+              <text
+                x={HEX_R * 0.55}
+                y={-HEX_R * 0.55}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={HEX_R * 0.4}
+                fontWeight={800}
+                fill="#1a1a1f"
+              >
+                {bee.multiplier}×
+              </text>
+              <g transform={`translate(${-HEX_R * 0.55} ${-HEX_R * 0.55}) scale(-1 1)`}>
+                <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={HEX_R * 0.4}>
+                  🐝
+                </text>
+              </g>
+            </g>
+          );
+        }
+        const isBonus = bonusLetter === origLetter;
         return (
-          <g key={`${letter}-${i}`} transform={`translate(${x} ${y})`}>
+          <g key={`${origLetter}-${i}`} transform={`translate(${x} ${y})`}>
             <polygon
               points={hexPoints(HEX_R)}
               fill={isBonus ? "#3a3a18" : "var(--bg-elev)"}
@@ -659,7 +776,7 @@ function BigHoneycomb({
               fill="var(--fg)"
               style={{ textTransform: "uppercase" }}
             >
-              {letter.toUpperCase()}
+              {origLetter.toUpperCase()}
             </text>
             {isBonus && (
               <text
@@ -677,11 +794,11 @@ function BigHoneycomb({
           </g>
         );
       })}
-      {displayed && (
+      {displayedFloat && (
         // Outer g positions, inner g animates. Splitting them avoids the CSS
         // transform from the animation overriding the SVG translate attribute
         // (the bee was landing at 0,0 — i.e. the center hex).
-        <g key={displayed} transform={`translate(${topX} ${topY - HEX_R * 1.85})`}>
+        <g key={displayedFloat} transform={`translate(${topX} ${topY - HEX_R * 1.85})`}>
           <g
             style={{
               animation: exiting
@@ -714,7 +831,7 @@ function BigHoneycomb({
               paintOrder="stroke"
               style={{ textTransform: "uppercase" }}
             >
-              {displayed.toUpperCase()}
+              {displayedFloat.toUpperCase()}
             </text>
           </g>
         </g>

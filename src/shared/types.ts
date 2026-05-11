@@ -15,17 +15,33 @@ export interface Player {
   connected: boolean;
 }
 
+export type GameMode = "classic" | "swarm";
+
+export interface ActiveBee {
+  letter: string;
+  // -1 = floating 8th letter (classic), 0 = center (queen only), 1-6 = outer hex
+  slot: number;
+  multiplier: number; // 1 in classic (bee gives access only); 1.5/2/3/5 in swarm
+  leaveAt: number;
+  queen?: boolean;
+}
+
 export interface RoundConfig {
   totalRounds: number;
   roundDurationSeconds: number;
   easyMode: boolean;
+  mode: GameMode;
 }
 
 export const DEFAULT_CONFIG: RoundConfig = {
   totalRounds: 3,
   roundDurationSeconds: 60,
   easyMode: true,
+  mode: "classic",
 };
+
+export const SWARM_MIN_DURATION_SECONDS = 60;
+export const SWARM_DEFAULT_DURATION_SECONDS = 90;
 
 export interface PuzzlePublic {
   letters: string[]; // 7 letters; index 0 is the center, 1..6 outer
@@ -82,11 +98,12 @@ export interface PublicGameState {
   // force-resume via the `skipWait` message.
   paused: boolean;
   pauseRemainingMs: number | null;
-  // A bee that periodically lands on an outer letter (15s windows on a 30s
-  // cadence, starting at +30s). Words containing the bee letter while it's
-  // active score 2x (stacks with bonusLetter for up to 4x).
-  beeLetter: string | null;
-  beeUntilMs: number | null; // epoch ms when this bee leaves
+  // Bees currently on the board.
+  // Classic mode: 0 or 1 bee, "carrying" an 8th letter (slot = -1).
+  // Swarm mode: any number of bees, each landed on a specific hex slot
+  // (0 = center for the queen; 1-6 = outer hexes). Each carries its own
+  // multiplier and replaces the original letter while present.
+  bees: ActiveBee[];
   gameStats: GameStats;
   // Easy mode: total valid word count + every word found across the room.
   // Populated only when config.easyMode is on and a round is in progress.

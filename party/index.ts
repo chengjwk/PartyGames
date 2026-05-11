@@ -1,5 +1,6 @@
 import type * as Party from "partykit/server";
 import type {
+  ActiveBee,
   ClientMessage,
   GameStats,
   Player,
@@ -10,7 +11,7 @@ import type {
   ScoredWord,
   ServerMessage,
 } from "../src/shared/types";
-import { DEFAULT_CONFIG } from "../src/shared/types";
+import { DEFAULT_CONFIG, SWARM_MIN_DURATION_SECONDS } from "../src/shared/types";
 import { generatePuzzle, type Puzzle } from "./puzzle";
 import { validateWord, scoreWord } from "./scoring";
 import pangramDefs from "./data/pangram-defs.json";
@@ -18,6 +19,12 @@ import pangramDefs from "./data/pangram-defs.json";
 const COUNTDOWN_MS = 3000;
 const PAUSE_GRACE_MS = 3000;
 const BEE_DEPARTED_GRACE_MS = 5000;
+// Swarm-mode cadence.
+const SWARM_FIRST_OFFSET_MS = 15_000;
+const SWARM_BEE_DURATION_MS = 10_000;
+const SWARM_QUEEN_DURATION_MS = 8_000;
+const SWARM_INTERVAL_START_MS = 20_000;
+const SWARM_INTERVAL_END_MS = 5_000;
 // Bee cadence: 15s wait, 15s bee, repeat. So a 60s round gets 2 bees
 // (15-30, 45-60); a 90s round gets 3 (15-30, 45-60, 75-90).
 const BEE_FIRST_OFFSET_MS = 15_000;
@@ -54,13 +61,13 @@ export default class WordHiveServer implements Party.Server {
   private pauseRemainingMs: number | null = null;
   private pauseGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private pausedAt: number | null = null;
-  // Bee bonus: schedule of upcoming bees (sorted), plus current bee state.
-  private beeSchedule: Array<{ arriveAt: number; leaveAt: number; letter: string }> = [];
-  private beeTimer: ReturnType<typeof setTimeout> | null = null;
-  private beeLetter: string | null = null;
-  private beeUntilMs: number | null = null;
-  // Recently-departed bees stay valid for a short grace so a queued submit
-  // doesn't fail just because the bee left a beat ago.
+  // Pre-computed arrival schedule + currently-on-board bees.
+  private beeSchedule: Array<{ arriveAt: number; queen?: boolean }> = [];
+  private bees: ActiveBee[] = [];
+  // Single timer that fires at the next arrival or departure event.
+  private nextBeeTimer: ReturnType<typeof setTimeout> | null = null;
+  // Recently-departed bee letters stay valid for a short grace so a queued
+  // submit doesn't fail just because the bee left a beat ago.
   private recentBees: Array<{ letter: string; expiresAt: number }> = [];
   private gameStats: GameStats = { longest: null, highest: null };
   private lastPangramAt: number | null = null;
@@ -227,18 +234,26 @@ export default class WordHiveServer implements Party.Server {
   private handleConfigure(msg: { config: Partial<RoundConfig> }) {
     if (this.phase !== "LOBBY") return;
     const next = { ...this.config };
+    if (msg.config.mode === "classic" || msg.config.mode === "swarm") {
+      next.mode = msg.config.mode;
+    }
     if (typeof msg.config.totalRounds === "number") {
       next.totalRounds = clamp(Math.round(msg.config.totalRounds), 1, 10);
     }
     if (typeof msg.config.roundDurationSeconds === "number") {
+      const minDur = next.mode === "swarm" ? SWARM_MIN_DURATION_SECONDS : 15;
       next.roundDurationSeconds = clamp(
         Math.round(msg.config.roundDurationSeconds),
-        15,
+        minDur,
         600,
       );
     }
     if (typeof msg.config.easyMode === "boolean") {
       next.easyMode = msg.config.easyMode;
+    }
+    // If we just switched into swarm and the duration is below the min, bump it.
+    if (next.mode === "swarm" && next.roundDurationSeconds < SWARM_MIN_DURATION_SECONDS) {
+      next.roundDurationSeconds = SWARM_MIN_DURATION_SECONDS;
     }
     this.config = next;
     this.broadcastState();
@@ -298,74 +313,155 @@ export default class WordHiveServer implements Party.Server {
   private buildBeeSchedule(roundStart: number, durMs: number) {
     this.beeSchedule = [];
     if (!this.puzzle) return;
-    const ALPHABET = "abcdefghijklmnopqrstuvwxyz".split("");
-    const outside = ALPHABET.filter((l) => !this.puzzle!.letterSet.has(l));
-    for (let t = BEE_FIRST_OFFSET_MS; t + BEE_DURATION_MS <= durMs; t += BEE_INTERVAL_MS) {
-      // Bee carries a brand-new 8th letter, sampled per-arrival (with replacement).
-      const letter = outside[Math.floor(Math.random() * outside.length)];
-      this.beeSchedule.push({
-        arriveAt: roundStart + t,
-        leaveAt: roundStart + t + BEE_DURATION_MS,
-        letter,
-      });
-    }
-  }
-
-  private scheduleNextBeeEvent() {
-    if (this.beeTimer) clearTimeout(this.beeTimer);
-    this.beeTimer = null;
-
-    // If a bee is currently active, schedule its departure.
-    if (this.beeLetter && this.beeUntilMs) {
-      const ms = this.beeUntilMs - Date.now();
-      if (ms <= 0) {
-        this.beeLeaves();
-      } else {
-        this.beeTimer = setTimeout(() => this.beeLeaves(), ms);
-      }
-      return;
-    }
-
-    // Otherwise schedule the next arrival, if any.
-    const next = this.beeSchedule[0];
-    if (!next) return;
-    const ms = next.arriveAt - Date.now();
-    if (ms <= 0) {
-      this.beeArrives();
+    if (this.config.mode === "swarm") {
+      this.buildSwarmSchedule(roundStart, durMs);
     } else {
-      this.beeTimer = setTimeout(() => this.beeArrives(), ms);
+      this.buildClassicSchedule(roundStart, durMs);
     }
   }
 
-  private beeArrives() {
-    const next = this.beeSchedule.shift();
-    if (!next) return;
-    this.beeLetter = next.letter;
-    this.beeUntilMs = next.leaveAt;
-    this.broadcastState();
+  private buildClassicSchedule(roundStart: number, durMs: number) {
+    for (let t = BEE_FIRST_OFFSET_MS; t + BEE_DURATION_MS <= durMs; t += BEE_INTERVAL_MS) {
+      this.beeSchedule.push({ arriveAt: roundStart + t });
+    }
+  }
+
+  // Inter-arrival shrinks linearly from SWARM_INTERVAL_START_MS down to
+  // SWARM_INTERVAL_END_MS as the round elapses, so the room feels busier
+  // toward the end. Plus one queen bee in the middle third of the round.
+  private buildSwarmSchedule(roundStart: number, durMs: number) {
+    let t = SWARM_FIRST_OFFSET_MS;
+    while (t + SWARM_BEE_DURATION_MS <= durMs) {
+      this.beeSchedule.push({ arriveAt: roundStart + t });
+      const fraction = Math.min(1, t / durMs);
+      const interval =
+        SWARM_INTERVAL_START_MS -
+        (SWARM_INTERVAL_START_MS - SWARM_INTERVAL_END_MS) * fraction;
+      t += interval;
+    }
+    const queenStart = durMs * 0.33;
+    const queenEnd = Math.min(durMs - SWARM_QUEEN_DURATION_MS - 2000, durMs * 0.6);
+    if (queenEnd > queenStart) {
+      const queenT = queenStart + Math.random() * (queenEnd - queenStart);
+      this.beeSchedule.push({ arriveAt: roundStart + queenT, queen: true });
+      this.beeSchedule.sort((a, b) => a.arriveAt - b.arriveAt);
+    }
+  }
+
+  // One timer for everything; fires at whichever is sooner: next arrival,
+  // or earliest active-bee departure.
+  private scheduleNextBeeEvent() {
+    if (this.nextBeeTimer) clearTimeout(this.nextBeeTimer);
+    this.nextBeeTimer = null;
+    const now = Date.now();
+    let nextEventAt: number | null = null;
+    if (this.beeSchedule[0]) nextEventAt = this.beeSchedule[0].arriveAt;
+    for (const b of this.bees) {
+      if (nextEventAt === null || b.leaveAt < nextEventAt) nextEventAt = b.leaveAt;
+    }
+    if (nextEventAt === null) return;
+    const ms = Math.max(0, nextEventAt - now);
+    this.nextBeeTimer = setTimeout(() => this.processBeeEvents(), ms);
+  }
+
+  private processBeeEvents() {
+    if (this.phase !== "ROUND_PLAYING" || this.paused) return;
+    const now = Date.now();
+    let changed = false;
+
+    // Departures
+    const remaining: ActiveBee[] = [];
+    for (const b of this.bees) {
+      if (b.leaveAt <= now) {
+        this.recentBees.push({ letter: b.letter, expiresAt: now + BEE_DEPARTED_GRACE_MS });
+        changed = true;
+      } else {
+        remaining.push(b);
+      }
+    }
+    this.bees = remaining;
+
+    // Arrivals (could be multiple if the interval is very short and we're catching up)
+    while (this.beeSchedule.length > 0 && this.beeSchedule[0].arriveAt <= now) {
+      const ev = this.beeSchedule.shift()!;
+      const bee = this.spawnBee(ev);
+      if (bee) {
+        this.bees.push(bee);
+        changed = true;
+      }
+    }
+
+    if (changed) this.broadcastState();
     this.scheduleNextBeeEvent();
   }
 
-  private beeLeaves() {
-    if (this.beeLetter) {
-      this.recentBees.push({
-        letter: this.beeLetter,
-        expiresAt: Date.now() + BEE_DEPARTED_GRACE_MS,
-      });
+  private spawnBee(ev: { arriveAt: number; queen?: boolean }): ActiveBee | null {
+    if (!this.puzzle) return null;
+    const isSwarm = this.config.mode === "swarm";
+    const letter = this.pickBeeLetter();
+    if (!letter) return null;
+
+    if (!isSwarm) {
+      // Classic: single floating 8th letter
+      return {
+        letter,
+        slot: -1,
+        multiplier: 1,
+        leaveAt: ev.arriveAt + BEE_DURATION_MS,
+      };
     }
-    this.beeLetter = null;
-    this.beeUntilMs = null;
-    this.broadcastState();
-    this.scheduleNextBeeEvent();
+
+    if (ev.queen) {
+      return {
+        letter,
+        slot: 0,
+        multiplier: 5,
+        leaveAt: ev.arriveAt + SWARM_QUEEN_DURATION_MS,
+        queen: true,
+      };
+    }
+
+    const slot = this.pickFreeOuterSlot();
+    if (slot === -1) return null; // all outer hexes busy — drop this arrival
+    return {
+      letter,
+      slot,
+      multiplier: this.pickMultiplier(),
+      leaveAt: ev.arriveAt + SWARM_BEE_DURATION_MS,
+    };
+  }
+
+  private pickFreeOuterSlot(): number {
+    const busy = new Set(
+      this.bees.filter((b) => b.slot >= 1 && b.slot <= 6).map((b) => b.slot),
+    );
+    const free = [1, 2, 3, 4, 5, 6].filter((s) => !busy.has(s));
+    if (free.length === 0) return -1;
+    return free[Math.floor(Math.random() * free.length)];
+  }
+
+  private pickMultiplier(): number {
+    const r = Math.random();
+    if (r < 0.5) return 1.5;
+    if (r < 0.85) return 2;
+    return 3;
+  }
+
+  private pickBeeLetter(): string | null {
+    if (!this.puzzle) return null;
+    const alphabet = "abcdefghijklmnopqrstuvwxyz".split("");
+    const taken = new Set<string>([...this.puzzle.letterSet, ...this.bees.map((b) => b.letter)]);
+    const free = alphabet.filter((l) => !taken.has(l));
+    if (free.length === 0) return null;
+    return free[Math.floor(Math.random() * free.length)];
   }
 
   private clearBee() {
-    if (this.beeTimer) {
-      clearTimeout(this.beeTimer);
-      this.beeTimer = null;
+    if (this.nextBeeTimer) {
+      clearTimeout(this.nextBeeTimer);
+      this.nextBeeTimer = null;
     }
-    this.beeLetter = null;
-    this.beeUntilMs = null;
+    this.bees = [];
     this.beeSchedule = [];
     this.recentBees = [];
   }
@@ -476,9 +572,13 @@ export default class WordHiveServer implements Party.Server {
     const now = Date.now();
     this.recentBees = this.recentBees.filter((r) => r.expiresAt > now);
     const extraLetters = new Set<string>();
-    if (this.beeLetter) extraLetters.add(this.beeLetter);
+    for (const b of this.bees) extraLetters.add(b.letter);
     for (const r of this.recentBees) extraLetters.add(r.letter);
-    const result = validateWord(msg.word, this.puzzle, extraLetters);
+    // In swarm mode, an active queen replaces the center letter requirement.
+    const queen = this.bees.find((b) => b.queen);
+    const centerOverride =
+      this.config.mode === "swarm" && queen ? queen.letter : undefined;
+    const result = validateWord(msg.word, this.puzzle, extraLetters, centerOverride);
     if (!result.ok) {
       this.send(sender, {
         type: "submitResult",
@@ -505,14 +605,20 @@ export default class WordHiveServer implements Party.Server {
 
     const player = this.players.get(clientId);
     const playerMult = player?.scoreMultiplier ?? 1;
-    const usedBonus = result.word.includes(this.puzzle.bonusLetter);
-    // True if the word used any letter that's not in the puzzle's 7 (i.e. came
-    // from the active bee or one in its grace period).
-    const usedBee = [...result.word].some(
-      (ch) => !this.puzzle!.letterSet.has(ch),
-    );
+    const isSwarm = this.config.mode === "swarm";
+    // In classic mode the static bonusLetter scores 2x. In swarm mode there's
+    // no static bonus — bees carry multipliers instead.
+    const usedBonus = !isSwarm && result.word.includes(this.puzzle.bonusLetter);
+    // The set of bee letters actually used in this word.
+    const beeLettersUsed = this.bees.filter((b) => result.word.includes(b.letter));
+    const usedBee = beeLettersUsed.length > 0;
     let m = 1;
     if (usedBonus) m *= 2;
+    if (isSwarm && beeLettersUsed.length > 0) {
+      // Max multiplier among bee letters used (queen 5x dominates).
+      const maxBee = Math.max(...beeLettersUsed.map((b) => b.multiplier));
+      m *= maxBee;
+    }
     m *= playerMult;
     const base = scoreWord({
       word: result.word,
@@ -587,9 +693,9 @@ export default class WordHiveServer implements Party.Server {
       clearTimeout(this.roundTimer);
       this.roundTimer = null;
     }
-    if (this.beeTimer) {
-      clearTimeout(this.beeTimer);
-      this.beeTimer = null;
+    if (this.nextBeeTimer) {
+      clearTimeout(this.nextBeeTimer);
+      this.nextBeeTimer = null;
     }
     this.roundEndsAt = null;
     this.paused = true;
@@ -672,12 +778,10 @@ export default class WordHiveServer implements Party.Server {
     if (this.phase === "ROUND_PLAYING") {
       this.roundEndsAt = now + remaining;
       this.roundTimer = setTimeout(() => this.endRound(), remaining);
-      // Shift bee schedule + active bee end by however long we were paused.
-      for (const ev of this.beeSchedule) {
-        ev.arriveAt += pauseDuration;
-        ev.leaveAt += pauseDuration;
-      }
-      if (this.beeUntilMs) this.beeUntilMs += pauseDuration;
+      // Shift all bee timings forward by the pause duration.
+      for (const ev of this.beeSchedule) ev.arriveAt += pauseDuration;
+      for (const b of this.bees) b.leaveAt += pauseDuration;
+      for (const r of this.recentBees) r.expiresAt += pauseDuration;
       this.scheduleNextBeeEvent();
     }
     this.broadcastState();
@@ -762,8 +866,7 @@ export default class WordHiveServer implements Party.Server {
       liveCounts,
       paused: this.paused,
       pauseRemainingMs: this.pauseRemainingMs,
-      beeLetter: this.beeLetter,
-      beeUntilMs: this.beeUntilMs,
+      bees: this.bees,
       gameStats: this.gameStats,
       easyModeStats,
       lastPangramAt: this.lastPangramAt,
