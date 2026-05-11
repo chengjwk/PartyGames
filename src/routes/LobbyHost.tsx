@@ -11,6 +11,7 @@ import { PARTY_HOST } from "../config";
 import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
+import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import type {
   LobbyServerMessage,
   LobbyState,
@@ -74,6 +75,7 @@ export default function LobbyHost() {
     <>
       <GardenBackground />
       <FullscreenButton />
+      <SoundUnlockPrompt />
       <main
         style={{
           minHeight: "100dvh",

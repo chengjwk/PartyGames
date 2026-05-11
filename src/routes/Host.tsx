@@ -10,6 +10,7 @@ import GardenBackground from "../components/GardenBackground";
 import Fireworks from "../components/Fireworks";
 import Avatar from "../components/Avatar";
 import GameMenu from "../components/GameMenu";
+import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import type { ActiveBee, PublicGameState, RoundConfig, RoundSummary } from "../shared/types";
 
 export default function Host() {
@@ -52,6 +53,7 @@ export default function Host() {
     <>
       <GardenBackground />
       <FullscreenButton />
+      <SoundUnlockPrompt />
       <GameMenu state={state} send={send} isHost />
       {view}
       {state.paused && (

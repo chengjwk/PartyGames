@@ -107,6 +107,27 @@ export const sounds = {
   isMuted() {
     return muted;
   },
+  // "running" once unlocked; "suspended" until a user gesture happens on this
+  // tab. Host TVs commonly never get a gesture (host clicks Start from their
+  // phone), so the UI shows a prompt until this flips to "running".
+  audioState(): AudioContextState | "no-context" {
+    return ctx ? ctx.state : "no-context";
+  },
+  // Must be called inside a user-gesture handler. Lazy-creates the context if
+  // needed and resumes it. Resolves to true when the context is running.
+  async tryUnlock(): Promise<boolean> {
+    const c = getCtx();
+    if (!c) return false;
+    if (c.state === "running") return true;
+    try {
+      await c.resume();
+    } catch {
+      // ignore
+    }
+    // Cast: TS narrows AudioContextState after `await resume()` in a way that
+    // excludes "running", but in practice that's exactly what we're testing.
+    return (c.state as string) === "running";
+  },
   // Soft major-third "ding" for valid words.
   good() {
     tone(660, 110);

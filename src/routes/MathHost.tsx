@@ -9,6 +9,7 @@ import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import PausedOverlay from "../components/PausedOverlay";
 import GameMenu from "../components/GameMenu";
+import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import Fireworks from "../components/Fireworks";
 import type {
   MathClientMessage,
@@ -95,6 +96,7 @@ export default function MathHost() {
     <>
       <GardenBackground />
       <FullscreenButton />
+      <SoundUnlockPrompt />
       <GameMenu state={stateForMenu} send={send as unknown as (m: unknown) => void as never} isHost />
       {view}
       {state.paused && (
