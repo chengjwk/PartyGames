@@ -2,7 +2,12 @@ import wordsRaw from "./data/words.json";
 import pangramsRaw from "./data/pangrams.json";
 
 const ALL_WORDS: ReadonlyArray<string> = wordsRaw as string[];
-const PANGRAM_SEEDS: ReadonlyArray<string> = pangramsRaw as string[];
+// Filter out seeds without a true vowel (Y alone isn't enough to make a
+// playable puzzle — too few valid words).
+const VOWELS = new Set(["a", "e", "i", "o", "u"]);
+const PANGRAM_SEEDS: ReadonlyArray<string> = (pangramsRaw as string[]).filter(
+  (w) => [...w].some((c) => VOWELS.has(c)),
+);
 
 const WORD_SET: ReadonlySet<string> = new Set(ALL_WORDS);
 
