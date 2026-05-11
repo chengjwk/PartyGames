@@ -676,7 +676,7 @@ function BigHoneycomb({
       const t = setTimeout(() => {
         setDisplayedFloat(null);
         setExiting(false);
-      }, 700);
+      }, 1350);
       return () => clearTimeout(t);
     }
   }, [floater, displayedFloat, exiting]);
@@ -884,8 +884,8 @@ function BigHoneycomb({
           <g
             style={{
               animation: exiting
-                ? "host-bee-out 0.65s ease-in forwards"
-                : "host-bee-in 0.7s ease-out, host-bee-bob 1.6s ease-in-out 0.7s infinite",
+                ? "host-bee-out 1.3s ease-in forwards"
+                : "host-bee-in 1.4s ease-out, host-bee-bob 1.6s ease-in-out 1.4s infinite",
               transformOrigin: "center",
             }}
           >

@@ -58,7 +58,7 @@ export default function Honeycomb({ letters, onTap, size = 320, bonusLetter, bee
       const t = setTimeout(() => {
         setDisplayedFloat(null);
         setExiting(false);
-      }, 700);
+      }, 1350);
       return () => clearTimeout(t);
     }
   }, [floater, displayedFloat, exiting]);
@@ -295,8 +295,8 @@ function BeeLetter({
   useEffect(() => setMountKey((k) => k + 1), [letter]);
 
   const animation = exiting
-    ? "hc-bee-out 0.65s ease-in forwards"
-    : "hc-bee-in 0.7s ease-out, hc-bee-bob 1.6s ease-in-out 0.7s infinite";
+    ? "hc-bee-out 1.3s ease-in forwards"
+    : "hc-bee-in 1.4s ease-out, hc-bee-bob 1.6s ease-in-out 1.4s infinite";
 
   return (
     <g key={mountKey} transform={`translate(${cx} ${cy})`}>
