@@ -27,6 +27,14 @@ const SWARM_BEE_DURATION_MS = 12_000;
 const SWARM_QUEEN_DURATION_MS = 8_000;
 const SWARM_INTERVAL_START_MS = 12_000;
 const SWARM_INTERVAL_END_MS = 3_500;
+// Final 5 seconds of a swarm round: regulars get evicted, then a rapid
+// stream of short-lived chaos bees rains in (1-2s on the board each,
+// arriving every 250-450ms). Pure chaos finale.
+const SWARM_CHAOS_WINDOW_MS = 5_000;
+const SWARM_CHAOS_INTERVAL_MIN_MS = 250;
+const SWARM_CHAOS_INTERVAL_MAX_MS = 450;
+const SWARM_CHAOS_BEE_DURATION_MIN_MS = 1_000;
+const SWARM_CHAOS_BEE_DURATION_MAX_MS = 2_000;
 // Bee cadence: 15s wait, 15s bee, repeat. So a 60s round gets 2 bees
 // (15-30, 45-60); a 90s round gets 3 (15-30, 45-60, 75-90).
 const BEE_FIRST_OFFSET_MS = 15_000;
@@ -66,7 +74,15 @@ export default class WordHiveServer implements Party.Server {
   // Pre-computed arrival schedule + currently-on-board bees.
   // The next bee event (arrival OR departure) is scheduled via the DO's
   // storage alarm so it survives hibernation when the room goes idle.
-  private beeSchedule: Array<{ arriveAt: number; queen?: boolean }> = [];
+  private beeSchedule: Array<{
+    arriveAt: number;
+    queen?: boolean;
+    // Override the default per-mode duration. Used by the chaos finale.
+    durationMs?: number;
+    // Marker event (no bee spawned): evict currently-active bees to clear
+    // the board for the chaos finale.
+    chaosStart?: true;
+  }> = [];
   private bees: ActiveBee[] = [];
   // Recently-departed bee letters stay valid for a short grace so a queued
   // submit doesn't fail just because the bee left a beat ago.
@@ -336,10 +352,15 @@ export default class WordHiveServer implements Party.Server {
 
   // Inter-arrival shrinks linearly from SWARM_INTERVAL_START_MS down to
   // SWARM_INTERVAL_END_MS as the round elapses, so the room feels busier
-  // toward the end. Plus one queen bee in the middle third of the round.
+  // toward the end. Plus one queen bee in the middle third of the round,
+  // and a chaos finale in the last 5 seconds.
   private buildSwarmSchedule(roundStart: number, durMs: number) {
+    const chaosStartT = durMs - SWARM_CHAOS_WINDOW_MS;
+    // Regular arrivals: stop early enough that the last regular bee would
+    // ordinarily linger into the chaos window — that's fine, the chaosStart
+    // event evicts them so the board is clean for the finale.
     let t = SWARM_FIRST_OFFSET_MS;
-    while (t + SWARM_BEE_DURATION_MS <= durMs) {
+    while (t + SWARM_BEE_DURATION_MS <= durMs && t < chaosStartT) {
       this.beeSchedule.push({ arriveAt: roundStart + t });
       const fraction = Math.min(1, t / durMs);
       const interval =
@@ -352,8 +373,23 @@ export default class WordHiveServer implements Party.Server {
     if (queenEnd > queenStart) {
       const queenT = queenStart + Math.random() * (queenEnd - queenStart);
       this.beeSchedule.push({ arriveAt: roundStart + queenT, queen: true });
-      this.beeSchedule.sort((a, b) => a.arriveAt - b.arriveAt);
     }
+    if (chaosStartT > SWARM_FIRST_OFFSET_MS) {
+      this.beeSchedule.push({ arriveAt: roundStart + chaosStartT, chaosStart: true });
+      let ct = chaosStartT;
+      while (ct < durMs) {
+        const dur =
+          SWARM_CHAOS_BEE_DURATION_MIN_MS +
+          Math.random() *
+            (SWARM_CHAOS_BEE_DURATION_MAX_MS - SWARM_CHAOS_BEE_DURATION_MIN_MS);
+        this.beeSchedule.push({ arriveAt: roundStart + ct, durationMs: dur });
+        ct +=
+          SWARM_CHAOS_INTERVAL_MIN_MS +
+          Math.random() *
+            (SWARM_CHAOS_INTERVAL_MAX_MS - SWARM_CHAOS_INTERVAL_MIN_MS);
+      }
+    }
+    this.beeSchedule.sort((a, b) => a.arriveAt - b.arriveAt);
   }
 
   // One timer for everything; fires at whichever is sooner: next arrival,
@@ -421,6 +457,17 @@ export default class WordHiveServer implements Party.Server {
 
     while (this.beeSchedule.length > 0 && this.beeSchedule[0].arriveAt <= now) {
       const ev = this.beeSchedule.shift()!;
+      if (ev.chaosStart) {
+        // Evict every currently-active bee, staggered over ~250ms so it
+        // reads as a panic rather than a single-frame flicker.
+        for (const b of this.bees) {
+          const exitAt = now + 50 + Math.random() * 200;
+          if (b.leaveAt > exitAt) b.leaveAt = exitAt;
+        }
+        changed = true;
+        console.log(`[bees] CHAOS START — ${this.bees.length} bees evicting`);
+        continue;
+      }
       const bee = this.spawnBee(ev);
       if (bee) {
         this.bees.push(bee);
@@ -435,7 +482,7 @@ export default class WordHiveServer implements Party.Server {
     this.scheduleNextBeeEvent();
   }
 
-  private spawnBee(ev: { arriveAt: number; queen?: boolean }): ActiveBee | null {
+  private spawnBee(ev: { arriveAt: number; queen?: boolean; durationMs?: number }): ActiveBee | null {
     if (!this.puzzle) return null;
     const isSwarm = this.config.mode === "swarm";
 
@@ -478,7 +525,10 @@ export default class WordHiveServer implements Party.Server {
       slot,
       multiplier,
       leaveAt:
-        ev.arriveAt + (ev.queen ? SWARM_QUEEN_DURATION_MS : SWARM_BEE_DURATION_MS),
+        ev.arriveAt +
+        (ev.queen
+          ? SWARM_QUEEN_DURATION_MS
+          : ev.durationMs ?? SWARM_BEE_DURATION_MS),
       queen: ev.queen,
     };
   }
