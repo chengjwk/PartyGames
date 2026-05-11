@@ -63,10 +63,10 @@ export default class WordHiveServer implements Party.Server {
   private pauseGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private pausedAt: number | null = null;
   // Pre-computed arrival schedule + currently-on-board bees.
+  // The next bee event (arrival OR departure) is scheduled via the DO's
+  // storage alarm so it survives hibernation when the room goes idle.
   private beeSchedule: Array<{ arriveAt: number; queen?: boolean }> = [];
   private bees: ActiveBee[] = [];
-  // Single timer that fires at the next arrival or departure event.
-  private nextBeeTimer: ReturnType<typeof setTimeout> | null = null;
   // Recently-departed bee letters stay valid for a short grace so a queued
   // submit doesn't fail just because the bee left a beat ago.
   private recentBees: Array<{ letter: string; expiresAt: number }> = [];
@@ -319,6 +319,9 @@ export default class WordHiveServer implements Party.Server {
     } else {
       this.buildClassicSchedule(roundStart, durMs);
     }
+    console.log(
+      `[bees] schedule built: mode=${this.config.mode}, durMs=${durMs}, events=${this.beeSchedule.length}`,
+    );
   }
 
   private buildClassicSchedule(roundStart: number, durMs: number) {
@@ -351,30 +354,60 @@ export default class WordHiveServer implements Party.Server {
 
   // One timer for everything; fires at whichever is sooner: next arrival,
   // or earliest active-bee departure.
+  // Schedules the next bee event via the DO storage alarm. The alarm survives
+  // hibernation, which plain setTimeout did not — that was killing the bee
+  // chain whenever the room went briefly idle between events.
   private scheduleNextBeeEvent() {
-    if (this.nextBeeTimer) clearTimeout(this.nextBeeTimer);
-    this.nextBeeTimer = null;
     const now = Date.now();
     let nextEventAt: number | null = null;
     if (this.beeSchedule[0]) nextEventAt = this.beeSchedule[0].arriveAt;
     for (const b of this.bees) {
       if (nextEventAt === null || b.leaveAt < nextEventAt) nextEventAt = b.leaveAt;
     }
-    if (nextEventAt === null) return;
-    const ms = Math.max(0, nextEventAt - now);
-    this.nextBeeTimer = setTimeout(() => this.processBeeEvents(), ms);
+    if (nextEventAt === null) {
+      console.log("[bees] no more events to schedule");
+      this.room.storage.deleteAlarm().catch(() => {});
+      return;
+    }
+    // Alarms only fire at-or-after the requested time; make sure we don't
+    // accidentally pass a past timestamp (setAlarm rejects those silently).
+    const target = Math.max(now + 10, nextEventAt);
+    console.log(
+      `[bees] next event in ${target - now}ms (schedule=${this.beeSchedule.length}, active=${this.bees.length})`,
+    );
+    this.room.storage.setAlarm(target).catch((e) => {
+      console.error("[bees] setAlarm failed:", e);
+    });
+  }
+
+  // Called by the runtime when the storage alarm fires.
+  async onAlarm() {
+    try {
+      this.processBeeEvents();
+    } catch (e) {
+      console.error("[bees] onAlarm processBeeEvents threw:", e);
+      // Retry shortly so the chain doesn't die.
+      this.room.storage.setAlarm(Date.now() + 1000).catch(() => {});
+    }
   }
 
   private processBeeEvents() {
-    if (this.phase !== "ROUND_PLAYING" || this.paused) return;
+    if (this.phase !== "ROUND_PLAYING") {
+      console.log(`[bees] tick fired but phase=${this.phase}, stopping`);
+      return;
+    }
+    if (this.paused) {
+      console.log("[bees] tick fired but paused; will rearm on resume");
+      return;
+    }
     const now = Date.now();
     let changed = false;
 
-    // Departures
     const remaining: ActiveBee[] = [];
     for (const b of this.bees) {
       if (b.leaveAt <= now) {
         this.recentBees.push({ letter: b.letter, expiresAt: now + BEE_DEPARTED_GRACE_MS });
+        console.log(`[bees] departure: ${b.letter} slot=${b.slot}`);
         changed = true;
       } else {
         remaining.push(b);
@@ -382,13 +415,15 @@ export default class WordHiveServer implements Party.Server {
     }
     this.bees = remaining;
 
-    // Arrivals (could be multiple if the interval is very short and we're catching up)
     while (this.beeSchedule.length > 0 && this.beeSchedule[0].arriveAt <= now) {
       const ev = this.beeSchedule.shift()!;
       const bee = this.spawnBee(ev);
       if (bee) {
         this.bees.push(bee);
         changed = true;
+        console.log(`[bees] arrival: ${bee.letter} slot=${bee.slot} x${bee.multiplier}${bee.queen ? " QUEEN" : ""}`);
+      } else {
+        console.log(`[bees] arrival skipped (no free slot or letter) for event at ${ev.arriveAt}`);
       }
     }
 
@@ -458,10 +493,7 @@ export default class WordHiveServer implements Party.Server {
   }
 
   private clearBee() {
-    if (this.nextBeeTimer) {
-      clearTimeout(this.nextBeeTimer);
-      this.nextBeeTimer = null;
-    }
+    this.room.storage.deleteAlarm().catch(() => {});
     this.bees = [];
     this.beeSchedule = [];
     this.recentBees = [];
@@ -694,10 +726,7 @@ export default class WordHiveServer implements Party.Server {
       clearTimeout(this.roundTimer);
       this.roundTimer = null;
     }
-    if (this.nextBeeTimer) {
-      clearTimeout(this.nextBeeTimer);
-      this.nextBeeTimer = null;
-    }
+    this.room.storage.deleteAlarm().catch(() => {});
     this.roundEndsAt = null;
     this.paused = true;
     this.pausedAt = now;
