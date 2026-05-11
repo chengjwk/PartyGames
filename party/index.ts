@@ -17,6 +17,7 @@ import { validateWord, scoreWord } from "./scoring";
 import pangramDefs from "./data/pangram-defs.json";
 
 const COUNTDOWN_MS = 3000;
+const VOWELS_LOWER = new Set(["a", "e", "i", "o", "u"]);
 const PAUSE_GRACE_MS = 3000;
 const BEE_DEPARTED_GRACE_MS = 5000;
 // Swarm-mode cadence — tuned for ~9 worker bees + 1 queen on a 90s round,
@@ -434,11 +435,11 @@ export default class WordHiveServer implements Party.Server {
   private spawnBee(ev: { arriveAt: number; queen?: boolean }): ActiveBee | null {
     if (!this.puzzle) return null;
     const isSwarm = this.config.mode === "swarm";
-    const letter = this.pickBeeLetter();
-    if (!letter) return null;
 
     if (!isSwarm) {
-      // Classic: single floating 8th letter
+      // Classic: single floating 8th letter — any letter is fine.
+      const letter = this.pickBeeLetter();
+      if (!letter) return null;
       return {
         letter,
         slot: -1,
@@ -447,24 +448,70 @@ export default class WordHiveServer implements Party.Server {
       };
     }
 
+    // Swarm: figure out which slot we're landing on first.
+    let slot: number;
+    let multiplier: number;
     if (ev.queen) {
-      return {
-        letter,
-        slot: 0,
-        multiplier: 5,
-        leaveAt: ev.arriveAt + SWARM_QUEEN_DURATION_MS,
-        queen: true,
-      };
+      slot = 0;
+      multiplier = 5;
+    } else {
+      slot = this.pickFreeOuterSlot();
+      if (slot === -1) return null;
+      multiplier = this.pickMultiplier();
     }
 
-    const slot = this.pickFreeOuterSlot();
-    if (slot === -1) return null; // all outer hexes busy — drop this arrival
+    // Vowels currently visible on the board AFTER this bee covers `slot`,
+    // BUT not counting the new bee's own letter. If zero, force the new
+    // bee letter to be a vowel so the board always has at least one.
+    const visibleVowelsWithoutNew = this.countVisibleVowels(slot);
+    const letter =
+      visibleVowelsWithoutNew > 0
+        ? this.pickBeeLetter()
+        : this.pickVowelBeeLetter() ?? this.pickBeeLetter();
+    if (!letter) return null;
+
     return {
       letter,
       slot,
-      multiplier: this.pickMultiplier(),
-      leaveAt: ev.arriveAt + SWARM_BEE_DURATION_MS,
+      multiplier,
+      leaveAt:
+        ev.arriveAt + (ev.queen ? SWARM_QUEEN_DURATION_MS : SWARM_BEE_DURATION_MS),
+      queen: ev.queen,
     };
+  }
+
+  // Count vowels visible on the board if `excludeSlot` (the new bee's slot)
+  // is covered. Excludes the new bee's own letter from the count — caller
+  // uses this to decide whether the new bee letter needs to be a vowel.
+  private countVisibleVowels(excludeSlot: number): number {
+    if (!this.puzzle) return 0;
+    let count = 0;
+    // Center (slot 0)
+    if (excludeSlot !== 0) {
+      const queen = this.bees.find((b) => b.queen);
+      const centerLetter = queen?.letter ?? this.puzzle.center;
+      if (VOWELS_LOWER.has(centerLetter)) count++;
+    }
+    // Outer slots 1..6
+    const outerLetters = this.puzzle.letters.slice(1);
+    for (let i = 1; i <= 6; i++) {
+      if (i === excludeSlot) continue;
+      const cover = this.bees.find((b) => b.slot === i);
+      const effLetter = cover ? cover.letter : outerLetters[i - 1];
+      if (VOWELS_LOWER.has(effLetter)) count++;
+    }
+    return count;
+  }
+
+  private pickVowelBeeLetter(): string | null {
+    if (!this.puzzle) return null;
+    const taken = new Set<string>([
+      ...this.puzzle.letterSet,
+      ...this.bees.map((b) => b.letter),
+    ]);
+    const freeVowels = [...VOWELS_LOWER].filter((v) => !taken.has(v));
+    if (freeVowels.length === 0) return null;
+    return freeVowels[Math.floor(Math.random() * freeVowels.length)];
   }
 
   private pickFreeOuterSlot(): number {
