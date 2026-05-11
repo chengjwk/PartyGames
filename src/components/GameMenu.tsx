@@ -5,32 +5,38 @@ interface GameMenuProps {
   state: PublicGameState;
   send: (msg: ClientMessage) => void;
   // True if the viewer is currently the host player (or has host conn).
-  // Switch-game is host-only because it affects every connected device.
+  // Back-to-picker is host-only because it affects every connected device.
   isHost?: boolean;
 }
 
-// Floating top-left buttons: Pause/Resume (during play) + Stop (any in-game
-// phase) + Switch (host only — kicks everyone back to the cross-game lobby).
+// Floating top-left buttons. Tree-structured navigation:
+//   in-game phases → Pause/Resume + Stop (returns to this game's lobby)
+//   LOBBY phase    → Back (host only — returns to the cross-game picker)
 export default function GameMenu({ state, send, isHost = true }: GameMenuProps) {
   const [confirmStop, setConfirmStop] = useState(false);
-  const [confirmSwitch, setConfirmSwitch] = useState(false);
 
-  if (state.phase === "LOBBY") return null;
+  if (state.phase === "LOBBY") {
+    if (!isHost) return null;
+    return (
+      <div style={floatingBarStyle}>
+        <button
+          onClick={() => send({ type: "switchGames" })}
+          aria-label="Back to game picker"
+          title="Back to game picker"
+          style={controlButtonStyle}
+        >
+          <BackIcon />
+          <span style={labelStyle}>Back</span>
+        </button>
+      </div>
+    );
+  }
+
   const canPause = state.phase === "ROUND_PLAYING";
 
   return (
     <>
-      <div
-        style={{
-          position: "fixed",
-          top: 12,
-          left: 12,
-          zIndex: 10,
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-        }}
-      >
+      <div style={floatingBarStyle}>
         {canPause && (
           <button
             onClick={() => send({ type: "togglePause" })}
@@ -55,17 +61,6 @@ export default function GameMenu({ state, send, isHost = true }: GameMenuProps) 
           <StopIcon />
           <span style={labelStyle}>Stop</span>
         </button>
-        {isHost && (
-          <button
-            onClick={() => setConfirmSwitch(true)}
-            aria-label="Switch game"
-            title="Back to game picker"
-            style={controlButtonStyle}
-          >
-            <SwitchIcon />
-            <span style={labelStyle}>Switch</span>
-          </button>
-        )}
       </div>
 
       {confirmStop && (
@@ -77,17 +72,6 @@ export default function GameMenu({ state, send, isHost = true }: GameMenuProps) 
           onConfirm={() => {
             send({ type: "resetGame" });
             setConfirmStop(false);
-          }}
-        />
-      )}
-      {confirmSwitch && (
-        <ConfirmDialog
-          title="Switch games?"
-          body="This ends the current game for everyone and goes back to the game picker."
-          onCancel={() => setConfirmSwitch(false)}
-          onConfirm={() => {
-            send({ type: "switchGames" });
-            setConfirmSwitch(false);
           }}
         />
       )}
@@ -168,6 +152,16 @@ function ConfirmDialog({
   );
 }
 
+const floatingBarStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 12,
+  left: 12,
+  zIndex: 10,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
 const controlButtonStyle: React.CSSProperties = {
   background: "var(--bg-elev)",
   color: "var(--fg)",
@@ -212,14 +206,11 @@ function StopIcon() {
   );
 }
 
-function SwitchIcon() {
-  // Two arrows swapping — back to picker / change games.
+function BackIcon() {
+  // Single left-pointing arrow — go back one level (lobby → game picker).
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m17 3 4 4-4 4" />
-      <path d="M21 7H9" />
-      <path d="m7 21-4-4 4-4" />
-      <path d="M3 17h12" />
+      <path d="m15 18-6-6 6-6" />
     </svg>
   );
 }
