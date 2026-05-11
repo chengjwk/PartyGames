@@ -24,17 +24,6 @@ const OPERATOR_WEIGHT: Record<MathOperator, number> = {
   "/": 1, // division is hard with single digits — keep it rare
 };
 
-function weightedPickDigit(): string {
-  let total = 0;
-  for (const d of DIGITS) total += DIGIT_WEIGHT[d];
-  let r = Math.random() * total;
-  for (const d of DIGITS) {
-    r -= DIGIT_WEIGHT[d];
-    if (r <= 0) return d;
-  }
-  return "1";
-}
-
 function weightedPickOperator(): MathOperator {
   const ops = Object.keys(OPERATOR_WEIGHT) as MathOperator[];
   let total = 0;
@@ -79,18 +68,35 @@ function isSolvable(digits: string[], op: MathOperator): boolean {
   return false;
 }
 
+// Weighted-without-replacement: pick from `pool` using DIGIT_WEIGHT.
+function weightedDrawFromPool(pool: string[]): string {
+  let total = 0;
+  for (const d of pool) total += DIGIT_WEIGHT[d];
+  let r = Math.random() * total;
+  for (const d of pool) {
+    r -= DIGIT_WEIGHT[d];
+    if (r <= 0) return d;
+  }
+  return pool[0];
+}
+
 export function generateMathPuzzle(): MathPuzzle {
-  for (let attempt = 0; attempt < 80; attempt++) {
+  for (let attempt = 0; attempt < 100; attempt++) {
     const op = weightedPickOperator();
+    // Pick 6 UNIQUE digits from 0-9, weighted.
+    const pool = [...DIGITS];
     const outerDigits: string[] = [];
-    for (let i = 0; i < 6; i++) outerDigits.push(weightedPickDigit());
-    // Ensure at least one non-zero digit for any operator.
+    while (outerDigits.length < 6 && pool.length > 0) {
+      const d = weightedDrawFromPool(pool);
+      outerDigits.push(d);
+      pool.splice(pool.indexOf(d), 1);
+    }
+    if (outerDigits.length < 6) continue;
     if (outerDigits.every((d) => d === "0")) continue;
-    // For ÷, need to actually be solvable — checking is cheap.
     if (!isSolvable(outerDigits, op)) continue;
     const digitSet = new Set(outerDigits);
     const multiset = new Map<string, number>();
-    for (const d of outerDigits) multiset.set(d, (multiset.get(d) ?? 0) + 1);
+    for (const d of outerDigits) multiset.set(d, 1);
     return {
       centerOperator: op,
       outerDigits,
@@ -98,8 +104,8 @@ export function generateMathPuzzle(): MathPuzzle {
       digitMultiset: multiset,
     };
   }
-  // Fallback deterministic puzzle (very unlikely to hit).
-  const fallback = ["2", "3", "4", "5", "1", "6"];
+  // Fallback deterministic puzzle.
+  const fallback = ["1", "2", "3", "4", "5", "6"];
   return {
     centerOperator: "+",
     outerDigits: fallback,

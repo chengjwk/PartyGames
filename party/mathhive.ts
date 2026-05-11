@@ -21,10 +21,12 @@ import { validateEquation, scoreEquation } from "./mathhive-scoring";
 const COUNTDOWN_MS = 3000;
 const PAUSE_GRACE_MS = 3000;
 const BEE_DEPARTED_GRACE_MS = 5000;
-// Classic math-mode cadence (mirrors wordhive classic).
-const BEE_FIRST_OFFSET_MS = 15_000;
+// Math mode: continuous bee coverage. First arrival 2s into the round so
+// players see the bare puzzle for a moment, then a fresh bee every 15s
+// with each one lasting exactly 15s — so there's always one on the board.
+const BEE_FIRST_OFFSET_MS = 2_000;
 const BEE_DURATION_MS = 15_000;
-const BEE_INTERVAL_MS = 30_000;
+const BEE_INTERVAL_MS = 15_000;
 
 export default class MathHiveServer implements Party.Server {
   // ───────── identity / connection state ─────────
@@ -360,9 +362,12 @@ export default class MathHiveServer implements Party.Server {
     const playerMult = player?.scoreMultiplier ?? 1;
     // Classic: bee letter usage gives a 2x multiplier. Swarm: bee multipliers
     // (not implemented yet for math — punt to "skip swarm in math v1").
-    const usedBee = [...result.digitChars].some(
-      (d) => !this.puzzle!.digitSet.has(d),
-    );
+    // The word benefits from the bee if it uses any digit that's currently
+    // (or recently was) a bee letter. Allows duplicate bees to still boost.
+    const beeLetters = new Set<string>();
+    for (const b of this.bees) beeLetters.add(b.letter);
+    for (const r of this.recentBees) beeLetters.add(r.letter);
+    const usedBee = result.digitChars.some((d) => beeLetters.has(d));
     let m = 1;
     if (usedBee) m *= 2;
     m *= playerMult;
@@ -569,27 +574,24 @@ export default class MathHiveServer implements Party.Server {
 
   private spawnBee(ev: { arriveAt: number; queen?: boolean }): ActiveBee | null {
     if (!this.puzzle) return null;
-    // Classic only: floating 8th digit. Pick a digit not in puzzle.
     const digit = this.pickBeeDigit();
-    if (!digit) return null;
     return {
-      letter: digit, // reuse the "letter" field name from ActiveBee
+      letter: digit, // ActiveBee's "letter" field carries the bee digit
       slot: -1,
       multiplier: 1,
       leaveAt: ev.arriveAt + BEE_DURATION_MS,
     };
   }
 
-  private pickBeeDigit(): string | null {
-    if (!this.puzzle) return null;
+  private pickBeeDigit(): string {
+    // Any digit 0-9 — overlap with puzzle digits is allowed. (If a bee
+    // brings a duplicate, the visible board doesn't gain a new digit, but
+    // words using that digit still get the bee 2x multiplier.)
     const digits = "0123456789".split("");
-    const taken = new Set([
-      ...this.puzzle.digitSet,
-      ...this.bees.map((b) => b.letter),
-    ]);
-    const free = digits.filter((d) => !taken.has(d));
-    if (free.length === 0) return null;
-    return free[Math.floor(Math.random() * free.length)];
+    // Avoid back-to-back identical bees (mildly confusing).
+    const lastBee = this.bees[this.bees.length - 1]?.letter;
+    const pool = lastBee ? digits.filter((d) => d !== lastBee) : digits;
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
   private clearBee() {
