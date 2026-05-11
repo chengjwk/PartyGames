@@ -55,6 +55,51 @@ function tone(freq: number, durationMs: number, opts: { gain?: number; type?: Os
   osc.stop(start + durationMs / 1000 + 0.05);
 }
 
+// Buzzing sound: sawtooth with frequency sweep + LFO vibrato.
+// Mimics a wing-flap (real bees buzz around 200Hz).
+function buzz(opts: {
+  startFreq: number;
+  midFreq?: number;
+  endFreq: number;
+  durationMs: number;
+  gain?: number;
+  vibratoHz?: number; // wingbeat frequency
+  vibratoDepth?: number; // ± Hz around the carrier
+}) {
+  const c = getCtx();
+  if (!c) return;
+  const start = c.currentTime;
+  const dur = opts.durationMs / 1000;
+  const peak = opts.gain ?? 0.08;
+
+  const osc = c.createOscillator();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(opts.startFreq, start);
+  if (opts.midFreq !== undefined) {
+    osc.frequency.linearRampToValueAtTime(opts.midFreq, start + dur * 0.6);
+    osc.frequency.linearRampToValueAtTime(opts.endFreq, start + dur);
+  } else {
+    osc.frequency.linearRampToValueAtTime(opts.endFreq, start + dur);
+  }
+
+  const g = c.createGain();
+  g.gain.setValueAtTime(0, start);
+  g.gain.linearRampToValueAtTime(peak, start + 0.04);
+  g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+
+  const lfo = c.createOscillator();
+  const lfoGain = c.createGain();
+  lfo.frequency.value = opts.vibratoHz ?? 18;
+  lfoGain.gain.value = opts.vibratoDepth ?? 20;
+  lfo.connect(lfoGain).connect(osc.frequency);
+
+  osc.connect(g).connect(c.destination);
+  osc.start(start);
+  osc.stop(start + dur + 0.05);
+  lfo.start(start);
+  lfo.stop(start + dur + 0.05);
+}
+
 export const sounds = {
   setMuted(m: boolean) {
     muted = m;
@@ -101,6 +146,44 @@ export const sounds = {
     tone(523, 100);
     tone(659, 100, { delayMs: 90 });
     tone(784, 220, { delayMs: 180 });
+  },
+  // Worker bee buzzing in to land on a hex.
+  beeIn() {
+    buzz({ startFreq: 140, midFreq: 250, endFreq: 210, durationMs: 360, gain: 0.09 });
+  },
+  // Bee flying off — descending pitch.
+  beeOut() {
+    buzz({ startFreq: 220, endFreq: 70, durationMs: 420, gain: 0.06 });
+  },
+  // Queen makes an entrance: low buzz + brass triad + sparkle.
+  queenIn() {
+    // Heavy low buzz (big bee)
+    buzz({
+      startFreq: 70,
+      midFreq: 130,
+      endFreq: 100,
+      durationMs: 600,
+      gain: 0.1,
+      vibratoHz: 14,
+      vibratoDepth: 35,
+    });
+    // Royal triad + sparkle layered on top
+    const g = 0.18;
+    tone(196, 280, { gain: g, type: "triangle", delayMs: 80 }); // G3
+    tone(294, 280, { gain: g, type: "triangle", delayMs: 80 }); // D4
+    tone(392, 380, { gain: g + 0.04, type: "triangle", delayMs: 240 }); // G4
+    tone(880, 260, { gain: 0.12, delayMs: 360 }); // A5
+    tone(1175, 320, { gain: 0.12, delayMs: 460 }); // D6
+  },
+  // Subtle "freeze" cue when the game pauses (downward slide).
+  pauseDown() {
+    tone(660, 100, { gain: 0.12, type: "triangle" });
+    tone(440, 220, { gain: 0.1, type: "triangle", delayMs: 80 });
+  },
+  // "Unfreeze" cue when the game resumes (upward slide).
+  pauseUp() {
+    tone(440, 100, { gain: 0.1, type: "triangle" });
+    tone(660, 220, { gain: 0.12, type: "triangle", delayMs: 80 });
   },
   // Big celebratory fanfare for the winner reveal at the end of a game.
   fanfare() {

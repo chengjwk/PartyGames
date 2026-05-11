@@ -20,6 +20,8 @@ export default function Host() {
   // Pre-round 3-2-1 ticks (countdown before the round starts).
   useTickAudio(state?.phase === "ROUND_STARTING" ? state.roundStartsAt : null);
   usePangramAudio(state?.gameStats ? (state.lastPangramAt ?? null) : null);
+  useBeeAudio(state?.bees);
+  usePauseAudio(state?.paused ?? false);
 
   if (!state) return <FullPage>Connecting…</FullPage>;
 
@@ -127,6 +129,41 @@ function usePangramAudio(lastPangramAt: number | null) {
     if (before === null) return; // skip initial value (server reset)
     if (lastPangramAt && lastPangramAt !== before) sounds.pangram();
   }, [lastPangramAt]);
+}
+
+// Plays bee-in / bee-out / queen-in sounds based on diff of the bees array.
+function useBeeAudio(bees: ActiveBee[] | undefined) {
+  const prev = useRef<ActiveBee[]>([]);
+  useEffect(() => {
+    const cur = bees ?? [];
+    const beeKey = (b: ActiveBee) => `${b.slot}:${b.letter}:${b.queen ? "Q" : "W"}`;
+    const prevKeys = new Set(prev.current.map(beeKey));
+    const curKeys = new Set(cur.map(beeKey));
+    // Arrivals
+    for (const b of cur) {
+      if (!prevKeys.has(beeKey(b))) {
+        if (b.queen) sounds.queenIn();
+        else sounds.beeIn();
+      }
+    }
+    // Departures
+    for (const b of prev.current) {
+      if (!curKeys.has(beeKey(b))) sounds.beeOut();
+    }
+    prev.current = cur;
+  }, [bees]);
+}
+
+// Soft chime on pause / resume.
+function usePauseAudio(paused: boolean) {
+  const prev = useRef<boolean | null>(null);
+  useEffect(() => {
+    const before = prev.current;
+    prev.current = paused;
+    if (before === null) return;
+    if (paused && !before) sounds.pauseDown();
+    if (!paused && before) sounds.pauseUp();
+  }, [paused]);
 }
 
 function FullPage({ children }: { children: React.ReactNode }) {
