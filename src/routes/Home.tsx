@@ -12,12 +12,11 @@ function generateRoomCode(): string {
 
 export default function Home() {
   const nav = useNavigate();
-  const startWord = () => nav(`/host/word/${generateRoomCode()}`);
-  const startMath = () => nav(`/host/math/${generateRoomCode()}`);
+  const start = () => nav(`/host/${generateRoomCode()}`);
   return (
     <main
       style={{
-        maxWidth: 800,
+        maxWidth: 600,
         margin: "0 auto",
         padding: "48px 24px",
         textAlign: "center",
@@ -25,82 +24,38 @@ export default function Home() {
     >
       <h1 style={{ fontSize: 56, margin: 0 }}>Party Games</h1>
       <p style={{ color: "var(--muted)", fontSize: 18, marginTop: 8 }}>
-        Pick a game. Phones join via QR code.
+        Word and math party games. Phones join via QR code; the host player picks
+        the game.
       </p>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 20,
-          marginTop: 40,
-        }}
+      <button
+        onClick={start}
+        style={{ fontSize: 22, padding: "16px 32px", marginTop: 32 }}
       >
-        <GameCard
-          title="WordHive"
-          emoji="🐝"
-          accent="#f5b400"
-          description="Make as many words as you can from the honeycomb. Bees swoop in with bonus letters."
-          onClick={startWord}
-        />
-        <GameCard
-          title="MathHive"
-          emoji="🧮"
-          accent="#6aa6ff"
-          description="Build equations from the digit hive. The center digit is required in every answer."
-          onClick={startMath}
-        />
+        Host a new game
+      </button>
+      <div style={{ display: "flex", gap: 24, justifyContent: "center", marginTop: 32 }}>
+        <GameSummary emoji="🐝" name="WordHive" accent="#f5b400" />
+        <GameSummary emoji="🧮" name="MathHive" accent="#6aa6ff" />
       </div>
     </main>
   );
 }
 
-function GameCard({
-  title,
-  emoji,
-  accent,
-  description,
-  onClick,
-}: {
-  title: string;
-  emoji: string;
-  accent: string;
-  description: string;
-  onClick: () => void;
-}) {
+function GameSummary({ emoji, name, accent }: { emoji: string; name: string; accent: string }) {
   return (
-    <button
-      onClick={onClick}
+    <div
       style={{
         background: "var(--bg-elev)",
-        border: `2px solid ${accent}`,
-        borderRadius: 16,
-        padding: 28,
+        border: `1px solid ${accent}`,
+        borderRadius: 12,
+        padding: "12px 18px",
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
-        gap: 12,
-        cursor: "pointer",
-        color: "var(--fg)",
+        gap: 10,
       }}
     >
-      <div style={{ fontSize: 64, lineHeight: 1 }}>{emoji}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, color: accent }}>{title}</div>
-      <div style={{ fontSize: 15, color: "var(--muted)", lineHeight: 1.4 }}>
-        {description}
-      </div>
-      <div
-        style={{
-          marginTop: 8,
-          padding: "10px 24px",
-          borderRadius: 8,
-          background: accent,
-          color: "var(--bg)",
-          fontWeight: 700,
-          fontSize: 16,
-        }}
-      >
-        Host a new game
-      </div>
-    </button>
+      <span style={{ fontSize: 32 }}>{emoji}</span>
+      <span style={{ fontWeight: 700, color: accent }}>{name}</span>
+    </div>
   );
 }

@@ -3,7 +3,8 @@
   "name": "wordhive",
   "main": "party/index.ts",
   "parties": {
-    "mathhive": "party/mathhive.ts"
+    "mathhive": "party/mathhive.ts",
+    "lobby": "party/lobby.ts"
   },
   "compatibilityDate": "2024-09-01"
 }
