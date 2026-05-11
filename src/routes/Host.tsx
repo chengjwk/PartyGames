@@ -666,29 +666,45 @@ function BigHoneycomb({
           0%,100% { transform: translateY(0); }
           50% { transform: translateY(-5px); }
         }
+        @keyframes host-worker-in {
+          0%   { transform: translate(var(--fx), var(--fy)) rotate(var(--fr)) scale(0.55); opacity: 0; }
+          45%  { opacity: 1; }
+          70%  { transform: translate(8px, -6px) rotate(8deg) scale(1.12); }
+          100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+        }
+        @keyframes host-queen-in {
+          0%   { transform: translate(0, -80px) scale(0.2); opacity: 0; }
+          45%  { opacity: 1; }
+          65%  { transform: translate(0, 5px) scale(1.2); }
+          100% { transform: translate(0, 0) scale(1); opacity: 1; }
+        }
+        @keyframes host-swarm-bob {
+          0%,100% { transform: translate(0, 0); }
+          50% { transform: translate(0, -4px); }
+        }
       `}</style>
       {/* Center hex (queen replaces during her window) */}
       <g transform={`translate(0 0)`}>
-        <polygon
-          points={hexPoints(HEX_R)}
-          fill="var(--accent)"
-          stroke={queen ? "#fff" : "var(--border)"}
-          strokeWidth={queen ? 5 : 2}
-        />
-        <text
-          x={0}
-          y={0}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize={HEX_R * 0.95}
-          fontWeight={800}
-          fill="var(--accent-fg)"
-          style={{ textTransform: "uppercase" }}
-        >
-          {(queen?.letter ?? center).toUpperCase()}
-        </text>
-        {queen && (
-          <>
+        {queen ? (
+          <g key={`queen-${queen.letter}`} style={hostBeeAnim("queen")}>
+            <polygon
+              points={hexPoints(HEX_R)}
+              fill="var(--accent)"
+              stroke="#fff"
+              strokeWidth={5}
+            />
+            <text
+              x={0}
+              y={0}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={HEX_R * 0.95}
+              fontWeight={800}
+              fill="var(--accent-fg)"
+              style={{ textTransform: "uppercase" }}
+            >
+              {queen.letter.toUpperCase()}
+            </text>
             <text
               x={HEX_R * 0.55}
               y={-HEX_R * 0.55}
@@ -709,6 +725,27 @@ function BigHoneycomb({
             >
               👑
             </text>
+          </g>
+        ) : (
+          <>
+            <polygon
+              points={hexPoints(HEX_R)}
+              fill="var(--accent)"
+              stroke="var(--border)"
+              strokeWidth={2}
+            />
+            <text
+              x={0}
+              y={0}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={HEX_R * 0.95}
+              fontWeight={800}
+              fill="var(--accent-fg)"
+              style={{ textTransform: "uppercase" }}
+            >
+              {center.toUpperCase()}
+            </text>
           </>
         )}
       </g>
@@ -720,39 +757,41 @@ function BigHoneycomb({
         if (bee) {
           return (
             <g key={`bee-${i}-${bee.letter}`} transform={`translate(${x} ${y})`}>
-              <polygon
-                points={hexPoints(HEX_R)}
-                fill="var(--accent)"
-                stroke="var(--accent)"
-                strokeWidth={5}
-              />
-              <text
-                x={0}
-                y={0}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={HEX_R * 0.95}
-                fontWeight={800}
-                fill="var(--accent-fg)"
-                style={{ textTransform: "uppercase" }}
-              >
-                {bee.letter.toUpperCase()}
-              </text>
-              <text
-                x={HEX_R * 0.55}
-                y={-HEX_R * 0.55}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={HEX_R * 0.4}
-                fontWeight={800}
-                fill="#1a1a1f"
-              >
-                {bee.multiplier}×
-              </text>
-              <g transform={`translate(${-HEX_R * 0.55} ${-HEX_R * 0.55}) scale(-1 1)`}>
-                <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={HEX_R * 0.4}>
-                  🐝
+              <g style={hostBeeAnim("worker")}>
+                <polygon
+                  points={hexPoints(HEX_R)}
+                  fill="var(--accent)"
+                  stroke="var(--accent)"
+                  strokeWidth={5}
+                />
+                <text
+                  x={0}
+                  y={0}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={HEX_R * 0.95}
+                  fontWeight={800}
+                  fill="var(--accent-fg)"
+                  style={{ textTransform: "uppercase" }}
+                >
+                  {bee.letter.toUpperCase()}
                 </text>
+                <text
+                  x={HEX_R * 0.55}
+                  y={-HEX_R * 0.55}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fontSize={HEX_R * 0.4}
+                  fontWeight={800}
+                  fill="#1a1a1f"
+                >
+                  {bee.multiplier}×
+                </text>
+                <g transform={`translate(${-HEX_R * 0.55} ${-HEX_R * 0.55}) scale(-1 1)`}>
+                  <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={HEX_R * 0.4}>
+                    🐝
+                  </text>
+                </g>
               </g>
             </g>
           );
@@ -838,6 +877,30 @@ function BigHoneycomb({
       )}
     </svg>
   );
+}
+
+const HOST_CORNERS: ReadonlyArray<{ "--fx": string; "--fy": string; "--fr": string }> = [
+  { "--fx": "-140px", "--fy": "-140px", "--fr": "-28deg" },
+  { "--fx": "140px", "--fy": "-140px", "--fr": "28deg" },
+  { "--fx": "-140px", "--fy": "140px", "--fr": "-22deg" },
+  { "--fx": "140px", "--fy": "140px", "--fr": "22deg" },
+];
+
+function hostBeeAnim(kind: "worker" | "queen"): React.CSSProperties {
+  if (kind === "queen") {
+    return {
+      animation:
+        "host-queen-in 0.65s cubic-bezier(.2,.7,.3,1.4), host-swarm-bob 1.6s ease-in-out 0.65s infinite",
+      transformOrigin: "center",
+    };
+  }
+  const c = HOST_CORNERS[Math.floor(Math.random() * HOST_CORNERS.length)];
+  return {
+    animation:
+      "host-worker-in 0.55s cubic-bezier(.2,.7,.3,1.4), host-swarm-bob 1.4s ease-in-out 0.55s infinite",
+    transformOrigin: "center",
+    ...(c as React.CSSProperties),
+  };
 }
 
 function hexPoints(r: number): string {

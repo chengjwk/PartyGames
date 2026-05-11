@@ -85,6 +85,22 @@ export default function Honeycomb({ letters, onTap, size = 320, bonusLetter, bee
           0%,100% { transform: translate(0, 0); }
           50% { transform: translate(0, -0.06px); }
         }
+        @keyframes hc-worker-in {
+          0%   { transform: translate(var(--fx), var(--fy)) rotate(var(--fr)) scale(0.6); opacity: 0; }
+          40%  { opacity: 1; }
+          70%  { transform: translate(0.2px, -0.15px) rotate(8deg) scale(1.1); }
+          100% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+        }
+        @keyframes hc-queen-in {
+          0%   { transform: translate(0, -8px) scale(0.2); opacity: 0; }
+          40%  { opacity: 1; }
+          60%  { transform: translate(0, 0.2px) scale(1.2); }
+          100% { transform: translate(0, 0) scale(1); opacity: 1; }
+        }
+        @keyframes hc-swarm-bob {
+          0%,100% { transform: translate(0, 0); }
+          50% { transform: translate(0, -0.05px); }
+        }
       `}</style>
       {queenBee ? (
         <Hex
@@ -162,8 +178,23 @@ interface HexProps {
 function Hex({ cx, cy, letter, fill, textFill, badge, badgeColor, beeOverlay, onTap }: HexProps) {
   const [pressed, setPressed] = useState(false);
   const release = () => setPressed(false);
+  // Pick a random fly-in direction per mount so bees don't all enter from
+  // the same corner — adds to the chaos.
+  const flyFrom = beeOverlay ? randomCorner() : null;
+  const animName = beeOverlay === "queen" ? "hc-queen-in" : "hc-worker-in";
   return (
     <g transform={`translate(${cx} ${cy})`}>
+      <g
+        style={
+          beeOverlay
+            ? {
+                animation: `${animName} 0.55s cubic-bezier(.2,.7,.3,1.4), hc-swarm-bob 1.4s ease-in-out 0.55s infinite`,
+                transformOrigin: "center",
+                ...(flyFrom as React.CSSProperties),
+              }
+            : undefined
+        }
+      >
       <g
         onPointerDown={(e) => {
           e.preventDefault();
@@ -226,8 +257,20 @@ function Hex({ cx, cy, letter, fill, textFill, badge, badgeColor, beeOverlay, on
           </text>
         )}
       </g>
+      </g>
     </g>
   );
+}
+
+const CORNERS: ReadonlyArray<{ "--fx": string; "--fy": string; "--fr": string }> = [
+  { "--fx": "-3.5px", "--fy": "-3px", "--fr": "-30deg" },
+  { "--fx": "3.5px", "--fy": "-3px", "--fr": "30deg" },
+  { "--fx": "-3.5px", "--fy": "3px", "--fr": "-25deg" },
+  { "--fx": "3.5px", "--fy": "3px", "--fr": "25deg" },
+];
+
+function randomCorner() {
+  return CORNERS[Math.floor(Math.random() * CORNERS.length)];
 }
 
 // Bee carrying its letter — no hex container. The letter sits beside/below

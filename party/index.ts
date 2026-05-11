@@ -19,12 +19,13 @@ import pangramDefs from "./data/pangram-defs.json";
 const COUNTDOWN_MS = 3000;
 const PAUSE_GRACE_MS = 3000;
 const BEE_DEPARTED_GRACE_MS = 5000;
-// Swarm-mode cadence.
-const SWARM_FIRST_OFFSET_MS = 15_000;
-const SWARM_BEE_DURATION_MS = 10_000;
+// Swarm-mode cadence — tuned for ~9 worker bees + 1 queen on a 90s round,
+// with 2-3 simultaneous bees on the board by the second half.
+const SWARM_FIRST_OFFSET_MS = 8_000;
+const SWARM_BEE_DURATION_MS = 12_000;
 const SWARM_QUEEN_DURATION_MS = 8_000;
-const SWARM_INTERVAL_START_MS = 20_000;
-const SWARM_INTERVAL_END_MS = 5_000;
+const SWARM_INTERVAL_START_MS = 12_000;
+const SWARM_INTERVAL_END_MS = 3_500;
 // Bee cadence: 15s wait, 15s bee, repeat. So a 60s round gets 2 bees
 // (15-30, 45-60); a 90s round gets 3 (15-30, 45-60, 75-90).
 const BEE_FIRST_OFFSET_MS = 15_000;
