@@ -28,13 +28,17 @@ const SWARM_QUEEN_DURATION_MS = 8_000;
 const SWARM_INTERVAL_START_MS = 12_000;
 const SWARM_INTERVAL_END_MS = 3_500;
 // Final 5 seconds of a swarm round: regulars get evicted, then a rapid
-// stream of short-lived chaos bees rains in (1-2s on the board each,
-// arriving every 250-450ms). Pure chaos finale.
+// stream of chaos bees rains in. For the first 4s of the finale each
+// bee stays ~500ms (long enough to type), and in the last 1s the bees
+// flash at 50-100ms each for pure chaos.
 const SWARM_CHAOS_WINDOW_MS = 5_000;
+const SWARM_CHAOS_FINAL_SECOND_MS = 1_000;
 const SWARM_CHAOS_INTERVAL_MIN_MS = 250;
 const SWARM_CHAOS_INTERVAL_MAX_MS = 450;
-const SWARM_CHAOS_BEE_DURATION_MIN_MS = 1_000;
-const SWARM_CHAOS_BEE_DURATION_MAX_MS = 2_000;
+const SWARM_CHAOS_BEE_DURATION_MIN_MS = 400;
+const SWARM_CHAOS_BEE_DURATION_MAX_MS = 600;
+const SWARM_CHAOS_FINAL_BEE_DURATION_MIN_MS = 50;
+const SWARM_CHAOS_FINAL_BEE_DURATION_MAX_MS = 100;
 // Bee cadence: 15s wait, 15s bee, repeat. So a 60s round gets 2 bees
 // (15-30, 45-60); a 90s round gets 3 (15-30, 45-60, 75-90).
 const BEE_FIRST_OFFSET_MS = 15_000;
@@ -376,12 +380,17 @@ export default class WordHiveServer implements Party.Server {
     }
     if (chaosStartT > SWARM_FIRST_OFFSET_MS) {
       this.beeSchedule.push({ arriveAt: roundStart + chaosStartT, chaosStart: true });
+      const finalSecondT = durMs - SWARM_CHAOS_FINAL_SECOND_MS;
       let ct = chaosStartT;
       while (ct < durMs) {
-        const dur =
-          SWARM_CHAOS_BEE_DURATION_MIN_MS +
-          Math.random() *
-            (SWARM_CHAOS_BEE_DURATION_MAX_MS - SWARM_CHAOS_BEE_DURATION_MIN_MS);
+        const inFinalSecond = ct >= finalSecondT;
+        const minDur = inFinalSecond
+          ? SWARM_CHAOS_FINAL_BEE_DURATION_MIN_MS
+          : SWARM_CHAOS_BEE_DURATION_MIN_MS;
+        const maxDur = inFinalSecond
+          ? SWARM_CHAOS_FINAL_BEE_DURATION_MAX_MS
+          : SWARM_CHAOS_BEE_DURATION_MAX_MS;
+        const dur = minDur + Math.random() * (maxDur - minDur);
         this.beeSchedule.push({ arriveAt: roundStart + ct, durationMs: dur });
         ct +=
           SWARM_CHAOS_INTERVAL_MIN_MS +
