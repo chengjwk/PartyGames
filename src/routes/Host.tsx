@@ -191,7 +191,7 @@ function Lobby({
   state: PublicGameState;
   send: ReturnType<typeof useRoomSocket>["send"];
 }) {
-  const playUrl = `${window.location.origin}/play/${roomCode}`;
+  const playUrl = `${window.location.origin}/play/word/${roomCode}`;
   const players = state.players;
   const cfg = state.config;
 

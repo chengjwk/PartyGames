@@ -2,5 +2,8 @@
   "$schema": "https://www.partykit.io/schema.json",
   "name": "wordhive",
   "main": "party/index.ts",
+  "parties": {
+    "mathhive": "party/mathhive.ts"
+  },
   "compatibilityDate": "2024-09-01"
 }

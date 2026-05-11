@@ -6,10 +6,11 @@ interface PausedOverlayProps {
   disconnected: Player[];
   showQR: boolean; // big TV view shows QR; phones don't need it
   onResume: () => void; // togglePause — anyone can call
+  game?: "word" | "math";
 }
 
-export default function PausedOverlay({ roomCode, disconnected, showQR, onResume }: PausedOverlayProps) {
-  const playUrl = `${window.location.origin}/play/${roomCode}`;
+export default function PausedOverlay({ roomCode, disconnected, showQR, onResume, game = "word" }: PausedOverlayProps) {
+  const playUrl = `${window.location.origin}/play/${game}/${roomCode}`;
   return (
     <div
       style={{

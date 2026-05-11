@@ -25,7 +25,11 @@ export interface RoomSocket {
   send: (msg: ClientMessage) => void;
 }
 
-export function useRoomSocket(roomCode: string, role: "host" | "player"): RoomSocket {
+export function useRoomSocket(
+  roomCode: string,
+  role: "host" | "player",
+  party = "main", // "main" = wordhive; "mathhive" routes to the math party
+): RoomSocket {
   const [state, setState] = useState<PublicGameState | null>(null);
   const [privateState, setPrivateState] = useState<PrivatePlayerState | null>(null);
   const [lastSubmit, setLastSubmit] = useState<SubmitFeedback | null>(null);
@@ -36,6 +40,7 @@ export function useRoomSocket(roomCode: string, role: "host" | "player"): RoomSo
     const socket = new PartySocket({
       host: PARTY_HOST,
       room: roomCode,
+      party,
       query: { role },
     });
     const onMsg = (e: MessageEvent) => {
@@ -67,7 +72,7 @@ export function useRoomSocket(roomCode: string, role: "host" | "player"): RoomSo
       socket.close();
       socketRef.current = null;
     };
-  }, [roomCode, role]);
+  }, [roomCode, role, party]);
 
   const send = (msg: ClientMessage) => {
     socketRef.current?.send(JSON.stringify(msg));
