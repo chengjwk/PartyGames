@@ -387,6 +387,13 @@ function Lobby({
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
         {state.players.map((p) => {
           const effDiff = (p.mathDifficulty ?? cfg.mathDifficulty) as MathDifficulty;
+          const currentHostConnected = !!state.players.find(
+            (q) => q.id === state.hostPlayerId,
+          )?.connected;
+          const canTransfer =
+            state.hostPlayerId !== p.id &&
+            p.connected &&
+            (isHost || !currentHostConnected);
           return (
             <PlayerRow
               key={p.id}
@@ -394,6 +401,10 @@ function Lobby({
               isHostBadge={state.hostPlayerId === p.id}
               isMe={p.id === clientId}
               onEdit={p.id === clientId ? () => setEditing(true) : undefined}
+              canTransferHostHere={canTransfer}
+              onMakeHost={() =>
+                send({ type: "transferHost", playerId: p.id })
+              }
               effectiveDifficulty={effDiff}
               hasOverride={!!p.mathDifficulty}
               canSetDifficulty={isHost}
@@ -503,6 +514,8 @@ function PlayerRow({
   isHostBadge,
   isMe,
   onEdit,
+  canTransferHostHere,
+  onMakeHost,
   effectiveDifficulty,
   hasOverride,
   canSetDifficulty,
@@ -514,6 +527,11 @@ function PlayerRow({
   // When set, this row is the viewer's own — shows a small pencil
   // button that opens the rename/avatar modal (parity with WordHive).
   onEdit?: () => void;
+  // "Make host" affordance — visible when viewer is allowed to set
+  // the host (current host, or current host is offline). Server
+  // enforces the actual rule.
+  canTransferHostHere?: boolean;
+  onMakeHost?: () => void;
   effectiveDifficulty: MathDifficulty;
   // True if this row has a per-player override (so we can show a
   // "clear override" affordance).
@@ -558,6 +576,23 @@ function PlayerRow({
           }}
         >
           <PencilIcon />
+        </button>
+      )}
+      {canTransferHostHere && onMakeHost && (
+        <button
+          onClick={onMakeHost}
+          aria-label={`Make ${player.name} the host`}
+          title={`Make ${player.name} the host`}
+          style={{
+            background: "var(--bg)",
+            color: "var(--fg)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "4px 8px",
+            fontSize: 12,
+          }}
+        >
+          👑 Make host
         </button>
       )}
       {canSetDifficulty ? (

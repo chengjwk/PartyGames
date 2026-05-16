@@ -1176,6 +1176,9 @@ function RoundResults({
           );
         })}
       </div>
+      {summary && (
+        <MostLovedThisRound state={state} summary={summary} />
+      )}
       {isHost ? (
         <button
           onClick={() => send({ type: "nextRound" })}
@@ -1207,6 +1210,7 @@ function FinalResults({
   const sortedTotals = [...state.players]
     .map((p) => ({ p, score: state.totalScores[p.id] ?? 0 }))
     .sort((a, b) => b.score - a.score);
+  const reactions = state.reactionsSummary;
   return (
     <main style={{ padding: "60px 16px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
       <h2 style={{ margin: 0, color: ACCENT }}>Final results</h2>
@@ -1231,6 +1235,9 @@ function FinalResults({
           </div>
         ))}
       </div>
+      {reactions && reactions.topDrawings.length > 0 && (
+        <MostLovedOfTheNight state={state} reactions={reactions} />
+      )}
       {isHost && (
         <button
           onClick={() => send({ type: "playAgain" })}
@@ -1240,6 +1247,199 @@ function FinalResults({
         </button>
       )}
     </main>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Reaction tally components
+// ──────────────────────────────────────────────────────────────────
+
+// Most-loved drawing from THIS round. Computed client-side from the
+// round summary's reactions map + chain drawings. Shows the top 1
+// drawing with reaction counts and the drawer's name.
+function MostLovedThisRound({
+  state,
+  summary,
+}: {
+  state: PollinartPublicGameState;
+  summary: NonNullable<PollinartPublicGameState["roundSummary"]>;
+}) {
+  type Top = {
+    drawing: Drawing;
+    drawerId: string;
+    promptedWord: string;
+    heart: number;
+    bee: number;
+  };
+  let best: Top | null = null;
+  for (const chain of summary.chains) {
+    for (const step of chain.steps) {
+      if (step.kind !== "draw") continue;
+      const r = summary.reactions[`${chain.id}|${step.index}`];
+      if (!r || r.heart + r.bee === 0) continue;
+      const total = r.heart + r.bee;
+      if (!best || total > best.heart + best.bee) {
+        best = {
+          drawing: step.drawing,
+          drawerId: step.playerId,
+          promptedWord: step.promptedWord,
+          heart: r.heart,
+          bee: r.bee,
+        };
+      }
+    }
+  }
+  if (!best) return null;
+  const drawer = state.players.find((p) => p.id === best!.drawerId);
+  const size = Math.min(window.innerWidth - 60, 280);
+  return (
+    <section
+      style={{
+        marginTop: 8,
+        padding: 12,
+        background: "var(--bg-elev)",
+        borderRadius: 12,
+        border: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        alignItems: "center",
+      }}
+    >
+      <div style={{ color: "var(--muted)", fontSize: 13, alignSelf: "stretch" }}>
+        Most loved this round
+      </div>
+      <DrawingReplay drawing={best.drawing} size={size} />
+      <div
+        style={{
+          alignSelf: "stretch",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          fontSize: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <strong style={{ flex: 1 }}>
+          {drawer?.name ?? "someone"}'s "{best.promptedWord}"
+        </strong>
+        <span style={{ color: "var(--muted)" }}>
+          ❤️ {best.heart} · 🐝 {best.bee}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+// Cross-round "most loved drawings of the night" + per-player
+// reaction totals. Top 3 drawings shown plus a small breakdown of
+// who received what.
+function MostLovedOfTheNight({
+  state,
+  reactions,
+}: {
+  state: PollinartPublicGameState;
+  reactions: NonNullable<PollinartPublicGameState["reactionsSummary"]>;
+}) {
+  const top3 = reactions.topDrawings.slice(0, 3);
+  const perPlayerEntries = Object.entries(reactions.perPlayer)
+    .map(([pid, counts]) => ({
+      pid,
+      heart: counts.heart,
+      bee: counts.bee,
+      total: counts.heart + counts.bee,
+    }))
+    .filter((e) => e.total > 0)
+    .sort((a, b) => b.total - a.total);
+  const size = Math.min(window.innerWidth - 80, 220);
+  return (
+    <section
+      style={{
+        marginTop: 12,
+        padding: 14,
+        background: "var(--bg-elev)",
+        borderRadius: 12,
+        border: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
+      <h3 style={{ margin: 0, color: ACCENT, fontSize: 18 }}>
+        Most loved drawings of the night
+      </h3>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          overflowX: "auto",
+          paddingBottom: 4,
+        }}
+      >
+        {top3.map((t) => {
+          const drawer = state.players.find((p) => p.id === t.drawerId);
+          return (
+            <div
+              key={`${t.chainId}|${t.stepIndex}`}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 4,
+                minWidth: size,
+              }}
+            >
+              <DrawingReplay drawing={t.drawing} size={size} />
+              <div style={{ fontSize: 13, color: "var(--fg)" }}>
+                {drawer?.name ?? "someone"} — "{t.promptedWord}"
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                ❤️ {t.heart} · 🐝 {t.bee}{" "}
+                <span style={{ opacity: 0.6 }}>(R{t.roundNumber})</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {perPlayerEntries.length > 0 && (
+        <div>
+          <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 4 }}>
+            Reactions earned
+          </div>
+          <ul
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              display: "grid",
+              gap: 4,
+            }}
+          >
+            {perPlayerEntries.map((e) => {
+              const p = state.players.find((q) => q.id === e.pid);
+              if (!p) return null;
+              return (
+                <li
+                  key={e.pid}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    fontSize: 13,
+                  }}
+                >
+                  <Avatar id={p.avatar} size={22} />
+                  <span style={{ flex: 1 }}>{p.name}</span>
+                  <span style={{ color: "var(--muted)" }}>
+                    ❤️ {e.heart} · 🐝 {e.bee}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

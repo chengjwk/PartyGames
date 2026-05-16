@@ -31,6 +31,7 @@ import type {
   PollinartLiveStat,
   PollinartPrivateState,
   PollinartPublicGameState,
+  PollinartReactionsSummary,
   PollinartRoundSummary,
   PollinartServerMessage,
   PollinartTask,
@@ -151,6 +152,13 @@ export default class PollinartServer implements Party.Server {
   // (e.g., after a drawer vote during reveal) doesn't double-count.
   // Cleared at the start of each round in `resetRoundState`.
   private lastAppliedContribution = new Map<string, number>();
+  // Each completed round's full summary, accumulated for the
+  // "most-loved drawing of the night" recap at FINAL_RESULTS.
+  // Cleared at game start / `handlePlayAgain`.
+  private completedRoundSummaries: Array<{
+    roundNumber: number;
+    summary: PollinartRoundSummary;
+  }> = [];
 
   private nextChainSerial = 1;
 
@@ -361,6 +369,7 @@ export default class PollinartServer implements Party.Server {
     this.totalScores.clear();
     for (const cid of this.players.keys()) this.totalScores.set(cid, 0);
     this.currentRound = 0;
+    this.completedRoundSummaries = [];
     this.beginCountdown();
   }
 
@@ -573,12 +582,56 @@ export default class PollinartServer implements Party.Server {
 
   private endReveal() {
     // Scoring already ran at beginReveal — just flip phase + clear
-    // the reveal cursor.
+    // the reveal cursor. Snapshot this round's full summary for the
+    // cross-round "most-loved drawing of the night" recap shown at
+    // FINAL_RESULTS.
+    if (this.roundSummary) {
+      this.completedRoundSummaries.push({
+        roundNumber: this.currentRound,
+        summary: this.roundSummary,
+      });
+    }
     this.revealChainIndex = null;
     this.revealStepIndex = null;
     this.phase = "ROUND_RESULTS";
     this.broadcastState();
     this.broadcastAllPrivate();
+  }
+
+  // Aggregate every drawing-step's reactions across all completed
+  // rounds. Used at FINAL_RESULTS to surface the most-loved drawings
+  // of the night + per-player reaction totals.
+  private computeReactionsSummary(): PollinartReactionsSummary {
+    type Entry = PollinartReactionsSummary["topDrawings"][number];
+    const entries: Entry[] = [];
+    const perPlayer: Record<string, { heart: number; bee: number }> = {};
+    for (const { roundNumber, summary } of this.completedRoundSummaries) {
+      for (const chain of summary.chains) {
+        for (const step of chain.steps) {
+          if (step.kind !== "draw") continue;
+          const key = `${chain.id}|${step.index}`;
+          const r = summary.reactions[key] ?? { heart: 0, bee: 0 };
+          if (r.heart === 0 && r.bee === 0) continue;
+          entries.push({
+            drawing: step.drawing,
+            drawerId: step.playerId,
+            chainId: chain.id,
+            stepIndex: step.index,
+            promptedWord: step.promptedWord,
+            roundNumber,
+            heart: r.heart,
+            bee: r.bee,
+          });
+          const tot = perPlayer[step.playerId] ?? { heart: 0, bee: 0 };
+          tot.heart += r.heart;
+          tot.bee += r.bee;
+          perPlayer[step.playerId] = tot;
+        }
+      }
+    }
+    entries.sort((a, b) => b.heart + b.bee - (a.heart + a.bee));
+    // Cap at top 5 so the FINAL_RESULTS payload stays bounded.
+    return { topDrawings: entries.slice(0, 5), perPlayer };
   }
 
   // ───── scoring ─────
@@ -869,6 +922,7 @@ export default class PollinartServer implements Party.Server {
     this.resetRoundState();
     this.totalScores.clear();
     this.currentRound = 0;
+    this.completedRoundSummaries = [];
     this.broadcastState();
     this.broadcastAllPrivate();
   }
@@ -913,6 +967,7 @@ export default class PollinartServer implements Party.Server {
     this.resetRoundState();
     this.totalScores.clear();
     this.currentRound = 0;
+    this.completedRoundSummaries = [];
     this.broadcastState();
     this.broadcastAllPrivate();
   }
@@ -1088,6 +1143,13 @@ export default class PollinartServer implements Party.Server {
       revealChainIndex: this.revealChainIndex,
       revealStepIndex: this.revealStepIndex,
       paused: this.paused,
+      // Only compute the cross-round reaction summary when we land
+      // at FINAL_RESULTS — every earlier phase doesn't need it and
+      // building it on every broadcast would balloon the payload.
+      reactionsSummary:
+        this.phase === "FINAL_RESULTS"
+          ? this.computeReactionsSummary()
+          : null,
     };
   }
 

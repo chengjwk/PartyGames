@@ -203,43 +203,73 @@ export default function LobbyPlay() {
           Players <span style={{ color: "var(--muted)" }}>({state.players.length})</span>
         </h2>
         <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
-          {state.players.map((p) => (
-            <li
-              key={p.id}
-              style={{
-                padding: "8px 12px",
-                background: "var(--bg-elev)",
-                borderRadius: 8,
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                opacity: p.connected ? 1 : 0.4,
-              }}
-            >
-              <Avatar id={p.avatar} size={36} />
-              <span style={{ flex: 1 }}>
-                {p.name}
-                {p.id === clientId && (
-                  <span style={{ color: "var(--muted)", marginLeft: 6, fontSize: 13 }}>(you)</span>
-                )}
-                {state.hostPlayerId === p.id && (
-                  <span
+          {state.players.map((p) => {
+            // "Make host" is allowed when (a) viewer IS the current
+            // host, delegating, or (b) the current host is offline so
+            // anyone can claim/transfer. Server validates either way.
+            const currentHostConnected = !!state.players.find(
+              (q) => q.id === state.hostPlayerId,
+            )?.connected;
+            const canTransfer =
+              state.hostPlayerId !== p.id &&
+              p.connected &&
+              (isHost || !currentHostConnected);
+            return (
+              <li
+                key={p.id}
+                style={{
+                  padding: "8px 12px",
+                  background: "var(--bg-elev)",
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  opacity: p.connected ? 1 : 0.4,
+                  flexWrap: "wrap",
+                }}
+              >
+                <Avatar id={p.avatar} size={36} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  {p.name}
+                  {p.id === clientId && (
+                    <span style={{ color: "var(--muted)", marginLeft: 6, fontSize: 13 }}>(you)</span>
+                  )}
+                  {state.hostPlayerId === p.id && (
+                    <span
+                      style={{
+                        marginLeft: 6,
+                        fontSize: 11,
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                        background: "var(--accent)",
+                        color: "var(--accent-fg)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      HOST
+                    </span>
+                  )}
+                </span>
+                {canTransfer && (
+                  <button
+                    onClick={() => send({ type: "transferHost", playerId: p.id })}
+                    aria-label={`Make ${p.name} the host`}
+                    title={`Make ${p.name} the host`}
                     style={{
-                      marginLeft: 6,
-                      fontSize: 11,
-                      padding: "2px 6px",
-                      borderRadius: 4,
-                      background: "var(--accent)",
-                      color: "var(--accent-fg)",
-                      fontWeight: 700,
+                      background: "var(--bg)",
+                      color: "var(--fg)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      padding: "4px 8px",
+                      fontSize: 12,
                     }}
                   >
-                    HOST
-                  </span>
+                    👑 Make host
+                  </button>
                 )}
-              </span>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
 
         {/* Spacer pushes the garden patch toward the bottom of the

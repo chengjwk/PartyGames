@@ -558,42 +558,154 @@ function ResultsView({
   const sorted = [...state.players]
     .map((p) => ({ p, score: state.totalScores[p.id] ?? 0 }))
     .sort((a, b) => b.score - a.score);
+  const reactions = state.reactionsSummary;
   return (
     <main style={{ minHeight: "100dvh", padding: "48px 64px", display: "flex", flexDirection: "column", gap: 24 }}>
       <h1 style={{ margin: 0, color: ACCENT, fontSize: 64 }}>{title}</h1>
-      <ol
+      <div
         style={{
-          listStyle: "none",
-          padding: 0,
-          margin: 0,
           display: "grid",
-          gap: 12,
-          maxWidth: 800,
+          gridTemplateColumns: final && reactions ? "minmax(0, 1fr) minmax(0, 1.2fr)" : "1fr",
+          gap: 32,
+          alignItems: "start",
         }}
       >
-        {sorted.map(({ p, score }, idx) => (
-          <li
-            key={p.id}
+        <ol
+          style={{
+            listStyle: "none",
+            padding: 0,
+            margin: 0,
+            display: "grid",
+            gap: 12,
+          }}
+        >
+          {sorted.map(({ p, score }, idx) => (
+            <li
+              key={p.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 16,
+                padding: "14px 20px",
+                background:
+                  idx === 0 && final ? "rgba(245, 180, 0, 0.25)" : "var(--bg-elev)",
+                borderRadius: 12,
+                border: "1px solid var(--border)",
+                fontSize: 28,
+                opacity: p.connected ? 1 : 0.5,
+              }}
+            >
+              <strong style={{ width: 32, textAlign: "center" }}>{idx + 1}</strong>
+              <Avatar id={p.avatar} size={56} />
+              <span style={{ flex: 1 }}>{p.name}</span>
+              <strong>{score}</strong>
+            </li>
+          ))}
+        </ol>
+        {final && reactions && reactions.topDrawings.length > 0 && (
+          <BigMostLoved state={state} reactions={reactions} />
+        )}
+      </div>
+    </main>
+  );
+}
+
+function BigMostLoved({
+  state,
+  reactions,
+}: {
+  state: PollinartPublicGameState;
+  reactions: NonNullable<PollinartPublicGameState["reactionsSummary"]>;
+}) {
+  const top3 = reactions.topDrawings.slice(0, 3);
+  const perPlayerEntries = Object.entries(reactions.perPlayer)
+    .map(([pid, c]) => ({ pid, heart: c.heart, bee: c.bee, total: c.heart + c.bee }))
+    .filter((e) => e.total > 0)
+    .sort((a, b) => b.total - a.total);
+  return (
+    <section
+      style={{
+        padding: 20,
+        background: "var(--bg-elev)",
+        borderRadius: 16,
+        border: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+      }}
+    >
+      <h2 style={{ margin: 0, color: ACCENT, fontSize: 32 }}>
+        Most loved drawings of the night
+      </h2>
+      <div
+        style={{
+          display: "flex",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        {top3.map((t) => {
+          const drawer = state.players.find((p) => p.id === t.drawerId);
+          return (
+            <div
+              key={`${t.chainId}|${t.stepIndex}`}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <DrawingReplay drawing={t.drawing} size={220} />
+              <div style={{ fontSize: 18 }}>
+                {drawer?.name ?? "someone"} — "{t.promptedWord}"
+              </div>
+              <div style={{ fontSize: 16, color: "var(--muted)" }}>
+                ❤️ {t.heart} · 🐝 {t.bee}{" "}
+                <span style={{ opacity: 0.6 }}>(R{t.roundNumber})</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {perPlayerEntries.length > 0 && (
+        <div>
+          <div style={{ color: "var(--muted)", fontSize: 16, marginBottom: 6 }}>
+            Reactions earned
+          </div>
+          <ul
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 16,
-              padding: "14px 20px",
-              background:
-                idx === 0 && final ? "rgba(245, 180, 0, 0.25)" : "var(--bg-elev)",
-              borderRadius: 12,
-              border: "1px solid var(--border)",
-              fontSize: 28,
-              opacity: p.connected ? 1 : 0.5,
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              display: "grid",
+              gap: 6,
             }}
           >
-            <strong style={{ width: 32, textAlign: "center" }}>{idx + 1}</strong>
-            <Avatar id={p.avatar} size={56} />
-            <span style={{ flex: 1 }}>{p.name}</span>
-            <strong>{score}</strong>
-          </li>
-        ))}
-      </ol>
-    </main>
+            {perPlayerEntries.map((e) => {
+              const p = state.players.find((q) => q.id === e.pid);
+              if (!p) return null;
+              return (
+                <li
+                  key={e.pid}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    fontSize: 18,
+                  }}
+                >
+                  <Avatar id={p.avatar} size={32} />
+                  <span style={{ flex: 1 }}>{p.name}</span>
+                  <span style={{ color: "var(--muted)" }}>
+                    ❤️ {e.heart} · 🐝 {e.bee}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }

@@ -170,6 +170,24 @@ export interface PollinartRoundSummary {
   reactions: Record<string, { heart: number; bee: number }>;
 }
 
+// Cross-round reaction aggregate, populated at FINAL_RESULTS.
+// `topDrawings` is sorted descending by (heart + bee) total — the
+// "most-loved drawing of the night" lineup. `perPlayer` accumulates
+// every reaction received on a player's drawings across the game.
+export interface PollinartReactionsSummary {
+  topDrawings: Array<{
+    drawing: Drawing;
+    drawerId: string;
+    chainId: string;
+    stepIndex: number;
+    promptedWord: string;
+    roundNumber: number;
+    heart: number;
+    bee: number;
+  }>;
+  perPlayer: Record<string, { heart: number; bee: number }>;
+}
+
 export interface PollinartPublicGameState {
   phase: Phase | "WORD_PICK" | "DRAW_PHASE" | "GUESS_PHASE" | "REVEAL";
   config: {
@@ -207,6 +225,9 @@ export interface PollinartPublicGameState {
   // taps to advance). 0..chainLength-1, or -1 = only the seed word shown.
   revealStepIndex: number | null;
   paused: boolean;
+  // Cross-round reaction summary. Only populated at FINAL_RESULTS;
+  // null in every other phase.
+  reactionsSummary: PollinartReactionsSummary | null;
 }
 
 export interface PollinartPrivateState {

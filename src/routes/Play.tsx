@@ -328,7 +328,17 @@ function PlayerLobby({
         Players <span style={{ color: "var(--muted)" }}>({state.players.length})</span>
       </h2>
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
-        {state.players.map((p) => (
+        {state.players.map((p) => {
+          // "Make host" enabled when viewer is current host OR the
+          // current host is offline. Server enforces both rules.
+          const currentHostConnected = !!state.players.find(
+            (q) => q.id === state.hostPlayerId,
+          )?.connected;
+          const canTransfer =
+            state.hostPlayerId !== p.id &&
+            p.connected &&
+            (isHost || !currentHostConnected);
+          return (
           <PlayerRow
             key={p.id}
             player={p}
@@ -341,8 +351,11 @@ function PlayerLobby({
                 : undefined
             }
             onEdit={p.id === clientId ? () => setEditing(true) : undefined}
+            canTransferHostHere={canTransfer}
+            onMakeHost={() => send({ type: "transferHost", playerId: p.id })}
           />
-        ))}
+          );
+        })}
       </ul>
 
       {editing && me && (
@@ -500,6 +513,8 @@ function PlayerRow({
   multiplierVisible,
   onMultiplierChange,
   onEdit,
+  canTransferHostHere,
+  onMakeHost,
 }: {
   player: Player;
   isHost: boolean;
@@ -507,6 +522,8 @@ function PlayerRow({
   multiplierVisible?: boolean;
   onMultiplierChange?: (m: number) => void;
   onEdit?: () => void;
+  canTransferHostHere?: boolean;
+  onMakeHost?: () => void;
 }) {
   return (
     <li
@@ -518,6 +535,7 @@ function PlayerRow({
         alignItems: "center",
         gap: 10,
         opacity: player.connected ? 1 : 0.4,
+        flexWrap: "wrap",
       }}
     >
       <Avatar id={player.avatar} size={36} />
@@ -557,6 +575,23 @@ function PlayerRow({
           }}
         >
           <PencilIcon />
+        </button>
+      )}
+      {canTransferHostHere && onMakeHost && (
+        <button
+          onClick={onMakeHost}
+          aria-label={`Make ${player.name} the host`}
+          title={`Make ${player.name} the host`}
+          style={{
+            background: "var(--bg)",
+            color: "var(--fg)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "4px 8px",
+            fontSize: 12,
+          }}
+        >
+          👑 Make host
         </button>
       )}
       {multiplierVisible &&

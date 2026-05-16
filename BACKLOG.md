@@ -75,18 +75,14 @@ Full per-round chain history kept in `roundArchive` for the reveal.
 
 ## Pollinart v1.1 — deferred features
 
-- **Near-miss voting.** *Robin → bird → swallow* type chains hit a
-  ton of fuzzy-not-exact guesses in mixed-age crowds. v1.1: when a
-  guess doesn't pass the Levenshtein check, the word-giver (the
-  player whose word was being drawn — they know what the answer
-  should be) gets a yes/no judgment prompt. Yes = +1 each to drawer
-  and guesser. Single-judge model avoids the "everyone votes on
-  everything" overhead.
+- ~~Near-miss voting~~ — **shipped** as the drawer-vote `ratePair`
+  flow during REVEAL.
 - **Chain length cap.** Optional config knob `chainLengthCap` to
   short-circuit the full circle (e.g. cap at 6 even in an 8-player
   lobby). Reveal stays funny but doesn't drag.
-- **Reveal reaction summary.** Tally ❤️ / 🐝 reactions in final
-  results. Surface "most-loved drawing of the night."
+- ~~Reveal reaction summary~~ — **shipped**. "Most loved this
+  round" in ROUND_RESULTS + "Most loved drawings of the night" +
+  per-player reaction totals at FINAL_RESULTS.
 
 ## MathHive v1.1 — deferred features
 
@@ -129,16 +125,12 @@ Full per-round chain history kept in `roundArchive` for the reveal.
 
 ## Lobby garden — future flower additions
 
-- **Cherry blossom on a tree.** The bold-cartoon cherry blossom
-  component already exists at `src/components/styles/
-  CherryBlossomBold.tsx`. To deploy it in the picker we'd want a
-  small cherry tree drawn into `GardenBackground` (branch + a
-  cluster of blossoms), since lone cherry blossoms on stems look
-  weird. Worth doing for a fourth-game slot or as a seasonal swap.
-- **Lotus on a pond.** Same situation — a lotus needs a pond /
-  lily pad to land on, which would mean adding a small water
-  patch + ripples to `GardenBackground`. Lovely visual but needs
-  the environment work first.
+- **Cherry blossom / lotus as picker slots.** The cherry tree and
+  lotus pond now exist as backdrop decorations in
+  `GardenBackground.tsx`. When we ship a fourth/fifth game, we
+  can lift `CherryBlossomBold` onto the tree and design a lotus
+  picker flower on the pond. Backdrop is ready; picker integration
+  pending.
 
 ## Housekeeping
 
