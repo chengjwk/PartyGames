@@ -2,6 +2,92 @@
 
 Things we discussed but parked. Revisit after playtest feedback.
 
+## Pollinart — new game spec (third game)
+
+Pictionary-meets-Telephone: each player starts with a word, draws it,
+the drawing passes to the next player who guesses, the guess passes to
+the next player who draws it, etc. Full circle ending on a guess.
+
+**Locked v1 decisions**
+
+- **Name.** Pollinart (Pollinate + art). Bee tie-in: a bee couriers
+  the canvas/word between players as the inter-step transition. Lobby
+  picker flower is a daisy (white + yellow center) to differentiate
+  from WordHive/MathHive lilies.
+- **Min players.** 3. Lobby "Start" gated on `players.size >= 3`.
+- **Rounds.** 3 by default, configurable. Each round: every player
+  starts a chain, all chains run in parallel.
+- **Chain length.** Always full circle for v1 (max funny). Even N →
+  length N (originator guesses their own chain at the end). Odd N →
+  length N-1 (one "off" player per chain, rotate who's off across the
+  N chains so participation evens out per round).
+- **Timers.** Word-pick 10s (3 choices per player from current tier),
+  Draw 45s, Guess 15s. Phase advances when all submit or timer fires.
+- **Word pool.** Hand-curated tiered list shipped as
+  `src/data/pollinart-words.ts`. Easy ~250 (everyday concrete nouns),
+  Medium ~200 (compound nouns, actions, abstractions), Hard ~150
+  (idioms, multi-word concepts, famous things). Complexity picker in
+  lobby selects tier.
+- **Drawing tools.** Pen with 3 widths, 8-color palette, eraser
+  (paints transparent), undo (last 10 strokes), clear-all with
+  confirm. No fill bucket, no shapes — keeps skill curve flat.
+- **Wire format.** Strokes, not bitmaps:
+  `type Stroke = { color: string; width: number; points: {x,y}[] }`.
+  Coordinates normalized to 0..1000 so rendering is
+  resolution-independent. Touch + pointer events both supported.
+- **Scoring.** Pair-fidelity. At each guess step, judge guess vs
+  *the word the drawer was given* (not the chain's original word).
+  Match = drawer AND guesser both score.
+  - Exact match (case-insensitive, trim, Levenshtein ≤ 2): +3 each,
+    auto-awarded server-side.
+  - Near miss: skipped in v1 — see v1.1 voting below.
+  - Optional end-of-chain bonus: +5 to *everyone* in the chain if the
+    final guess matches the chain's starting word.
+- **Reveal.** All chains play back side-by-side at end of round,
+  original → final, animated step-by-step. ❤️ / 🐝 reactions per
+  drawing (purely cosmetic, no score impact). "Most-loved drawing"
+  shown in final results.
+- **Disconnect handling.** Player drops with unsubmitted step → server
+  auto-submits empty drawing / empty guess for them, chain continues.
+
+**Server architecture sketch**
+
+New PartyKit room `pollinart`. State shape:
+
+```
+phase: LOBBY | WORD_PICK | DRAWING | GUESSING | REVEAL | ROUND_RESULTS | FINAL_RESULTS
+round: number
+config: { totalRounds, drawSec, guessSec, complexity, chainLengthCap? }
+players: Map<id, { name, score, connected }>
+roundOrder: playerId[]                       // shuffled per round
+chains: Record<chainId, {
+  startedBy: playerId
+  startingWord: string
+  steps: Array<DrawStep | GuessStep>
+  playerSequence: playerId[]
+}>
+stepIndex: number
+```
+
+DO alarms drive phase timers (same pattern as MathHive). Drawings
+persisted to DO storage so reconnects can replay the in-flight step.
+Full per-round chain history kept in `roundArchive` for the reveal.
+
+## Pollinart v1.1 — deferred features
+
+- **Near-miss voting.** *Robin → bird → swallow* type chains hit a
+  ton of fuzzy-not-exact guesses in mixed-age crowds. v1.1: when a
+  guess doesn't pass the Levenshtein check, the word-giver (the
+  player whose word was being drawn — they know what the answer
+  should be) gets a yes/no judgment prompt. Yes = +1 each to drawer
+  and guesser. Single-judge model avoids the "everyone votes on
+  everything" overhead.
+- **Chain length cap.** Optional config knob `chainLengthCap` to
+  short-circuit the full circle (e.g. cap at 6 even in an 8-player
+  lobby). Reveal stays funny but doesn't drag.
+- **Reveal reaction summary.** Tally ❤️ / 🐝 reactions in final
+  results. Surface "most-loved drawing of the night."
+
 ## MathHive v1.1 — deferred features
 
 - **Bees occupying digits.** Server has the `state.bees` wire field for
