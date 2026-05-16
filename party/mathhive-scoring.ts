@@ -1,181 +1,138 @@
-// Tokenizer, parser, evaluator, validator, and scorer for MathHive equations.
+// MathHive scoring + solve verification (v2).
 //
-// Only the puzzle's center operator is permitted in any submitted equation.
-// Operator precedence is meaningless when only one operator is in use, so
-// evaluation is strictly left-to-right.
+// Solve verification simulates the player's step list against the pool:
+// each step combines two "alive" tiles into a new one, consuming the
+// sources. The final step's result must equal the target. We also compute
+// which pool positions the final tile consumed — the all-six bonus only
+// triggers when every original digit ended up in the path.
 
-import type { MathPuzzle, MathOperator } from "./mathhive-puzzle";
-import type { MathSubmitReason, ScoredEquation } from "../src/shared/math-types";
+import type {
+  MathOperandRef,
+  MathOperator,
+  MathSolveReason,
+  MathSolveStep,
+} from "../src/shared/math-types";
+import {
+  ALL_SIX_BONUS,
+  TARGET_FLOOR_POINTS,
+} from "./mathhive-puzzle";
 
-const OPERATOR_POINTS: Record<MathOperator, number> = {
-  "+": 1,
-  "-": 1,
-  "*": 3,
-  "/": 4,
-};
-const PANGRAM_BONUS = 20;
-const FIRST_FINDER_BONUS = 3;
-const EPSILON = 1e-9;
+export interface SolveVerdictOk {
+  ok: true;
+  finalValue: number;
+  positionsMask: number; // bitmask of pool slots used by the winning tile
+  allSix: boolean;
+  stepsUsed: number;
+}
 
-type Token =
-  | { kind: "num"; value: number; digits: string[] }
-  | { kind: "op"; value: MathOperator }
-  | { kind: "eq" };
+export interface SolveVerdictFail {
+  ok: false;
+  reason: MathSolveReason;
+}
 
-export type MathValidation =
-  | { ok: false; reason: MathSubmitReason }
-  | {
-      ok: true;
-      normalized: string;
-      tokens: Token[];
-      pangram: boolean;
-      operatorCount: number;
-      digitChars: string[];
-    };
+export type SolveVerdict = SolveVerdictOk | SolveVerdictFail;
 
-function tokenize(raw: string): Token[] | null {
-  const tokens: Token[] = [];
-  let i = 0;
-  const s = raw.replace(/\s+/g, "");
-  while (i < s.length) {
-    const c = s[i];
-    if (c >= "0" && c <= "9") {
-      const digits: string[] = [];
-      let j = i;
-      while (j < s.length && s[j] >= "0" && s[j] <= "9") {
-        digits.push(s[j]);
-        j++;
-      }
-      if (digits.length > 1 && digits[0] === "0") return null;
-      tokens.push({ kind: "num", value: Number(digits.join("")), digits });
-      i = j;
-      continue;
+const FULL_MASK_6 = (1 << 6) - 1;
+
+export function verifySolve(args: {
+  poolDigits: string[];
+  allowedOperators: MathOperator[];
+  steps: MathSolveStep[];
+  target: number;
+}): SolveVerdict {
+  const { poolDigits, steps, target } = args;
+  if (steps.length === 0) return { ok: false, reason: "invalid_steps" };
+  if (poolDigits.length !== 6) return { ok: false, reason: "invalid_steps" };
+
+  const allowed = new Set(args.allowedOperators);
+
+  type Tile = { value: number; mask: number; alive: boolean };
+  const tiles: Tile[] = poolDigits.map((d, i) => ({
+    value: Number(d),
+    mask: 1 << i,
+    alive: true,
+  }));
+  const stepResults: Tile[] = [];
+
+  const resolve = (ref: MathOperandRef, currentStepIdx: number): Tile | null => {
+    if (ref.source === "pool") {
+      if (!Number.isInteger(ref.index) || ref.index < 0 || ref.index >= 6) return null;
+      return tiles[ref.index];
     }
-    if (c === "+" || c === "-" || c === "*" || c === "/") {
-      tokens.push({ kind: "op", value: c });
-      i++;
-      continue;
-    }
-    if (c === "=") {
-      tokens.push({ kind: "eq" });
-      i++;
-      continue;
+    if (ref.source === "step") {
+      if (!Number.isInteger(ref.index) || ref.index < 0 || ref.index >= currentStepIdx) return null;
+      return stepResults[ref.index];
     }
     return null;
-  }
-  return tokens;
-}
+  };
 
-// Left-to-right evaluation (no precedence needed since there's only one op).
-function evaluate(tokens: Token[]): { value: number; divZero?: boolean } | null {
-  if (tokens.length === 0) return null;
-  if (tokens[0].kind !== "num") return null;
-  for (let i = 1; i < tokens.length; i += 2) {
-    if (tokens[i].kind !== "op") return null;
-    if (i + 1 >= tokens.length || tokens[i + 1].kind !== "num") return null;
-  }
-  let acc = (tokens[0] as { value: number }).value;
-  for (let i = 1; i < tokens.length; i += 2) {
-    const op = (tokens[i] as { value: MathOperator }).value;
-    const n = (tokens[i + 1] as { value: number }).value;
-    switch (op) {
-      case "+": acc += n; break;
-      case "-": acc -= n; break;
-      case "*": acc *= n; break;
+  for (let si = 0; si < steps.length; si++) {
+    const step = steps[si];
+    if (!step || typeof step.operator !== "string" || !allowed.has(step.operator)) {
+      return { ok: false, reason: "disallowed_operator" };
+    }
+    const lTile = resolve(step.left, si);
+    const rTile = resolve(step.right, si);
+    if (!lTile || !rTile) return { ok: false, reason: "invalid_steps" };
+    if (lTile === rTile) return { ok: false, reason: "invalid_steps" };
+    if (!lTile.alive || !rTile.alive) return { ok: false, reason: "invalid_steps" };
+    // Sanity: tiles should never share pool positions if alive accounting
+    // is correct, but defense-in-depth never hurts.
+    if ((lTile.mask & rTile.mask) !== 0) return { ok: false, reason: "invalid_steps" };
+
+    let v: number;
+    switch (step.operator) {
+      case "+":
+        v = lTile.value + rTile.value;
+        break;
+      case "-":
+        v = lTile.value - rTile.value;
+        break;
+      case "*":
+        v = lTile.value * rTile.value;
+        break;
       case "/":
-        if (n === 0) return { value: 0, divZero: true };
-        acc /= n;
+        if (rTile.value === 0) return { ok: false, reason: "div_by_zero" };
+        if (lTile.value % rTile.value !== 0) return { ok: false, reason: "div_non_integer" };
+        v = lTile.value / rTile.value;
         break;
     }
-  }
-  return { value: acc };
-}
+    if (!Number.isFinite(v)) return { ok: false, reason: "invalid_steps" };
 
-function approxEqual(a: number, b: number): boolean {
-  return Math.abs(a - b) < EPSILON;
-}
-
-export function validateEquation(
-  raw: string,
-  puzzle: MathPuzzle,
-  extraDigits: Set<string>,
-): MathValidation {
-  const tokens = tokenize(raw);
-  if (!tokens || tokens.length === 0) return { ok: false, reason: "invalid_token" };
-
-  const equalsCount = tokens.filter((t) => t.kind === "eq").length;
-  if (equalsCount !== 1) return { ok: false, reason: "no_equals" };
-
-  const eqIdx = tokens.findIndex((t) => t.kind === "eq");
-  const left = tokens.slice(0, eqIdx);
-  const right = tokens.slice(eqIdx + 1);
-  if (left.length === 0 || right.length === 0) {
-    return { ok: false, reason: "two_sides" };
+    lTile.alive = false;
+    rTile.alive = false;
+    const newTile: Tile = { value: v, mask: lTile.mask | rTile.mask, alive: true };
+    stepResults.push(newTile);
   }
 
-  // Every operator must be the puzzle's center operator.
-  let operatorCount = 0;
-  for (const t of tokens) {
-    if (t.kind === "op") {
-      if (t.value !== puzzle.centerOperator) {
-        return { ok: false, reason: "invalid_token" };
-      }
-      operatorCount++;
-    }
+  const finalTile = stepResults[stepResults.length - 1];
+  if (finalTile.value !== target) {
+    return { ok: false, reason: "value_mismatch" };
   }
-  if (operatorCount === 0) return { ok: false, reason: "no_operator" };
-
-  // Every digit must come from puzzle outer digits (or a bee's extras).
-  const allowed = new Set<string>([
-    ...puzzle.digitSet,
-    ...Array.from(extraDigits),
-  ]);
-  const digitChars: string[] = [];
-  for (const t of tokens) {
-    if (t.kind === "num") {
-      for (const d of t.digits) {
-        if (!allowed.has(d)) return { ok: false, reason: "invalid_token" };
-        digitChars.push(d);
-      }
-    }
-  }
-
-  const lv = evaluate(left);
-  const rv = evaluate(right);
-  if (!lv || !rv) return { ok: false, reason: "invalid_token" };
-  if (lv.divZero || rv.divZero) return { ok: false, reason: "div_by_zero" };
-  if (!approxEqual(lv.value, rv.value)) return { ok: false, reason: "not_equal" };
-
-  // Pangram: every one of the puzzle's outer digits used at least once.
-  const uniqueDigitsUsed = new Set(digitChars);
-  const pangram = [...puzzle.digitSet].every((d) => uniqueDigitsUsed.has(d));
 
   return {
     ok: true,
-    normalized: tokens
-      .map((t) =>
-        t.kind === "eq" ? "=" : t.kind === "op" ? t.value : t.digits.join(""),
-      )
-      .join(""),
-    tokens,
-    pangram,
-    operatorCount,
-    digitChars,
+    finalValue: finalTile.value,
+    positionsMask: finalTile.mask,
+    allSix: finalTile.mask === FULL_MASK_6,
+    stepsUsed: steps.length,
   };
 }
 
-export function scoreEquation(opts: {
-  validation: Extract<MathValidation, { ok: true }>;
-  puzzle: MathPuzzle;
-  firstFinder: boolean;
-}): ScoredEquation {
-  let points = OPERATOR_POINTS[opts.puzzle.centerOperator] * opts.validation.operatorCount;
-  if (opts.validation.pangram) points += PANGRAM_BONUS;
-  if (opts.firstFinder) points += FIRST_FINDER_BONUS;
-  return {
-    equation: opts.validation.normalized,
-    points,
-    pangram: opts.validation.pangram,
-    firstFinder: opts.firstFinder,
-  };
+// Time-decay scoring: starts at basePoints, decays linearly to floor over
+// timeBudgetMs, plus the all-six bonus if applicable. Never negative
+// (floor enforces ≥1pt for any valid solve).
+export function scoreSolve(args: {
+  basePoints: number;
+  floorPoints?: number;
+  timeBudgetMs: number;
+  solveMs: number;
+  allSix: boolean;
+}): number {
+  const floor = args.floorPoints ?? TARGET_FLOOR_POINTS;
+  const ratio = Math.max(0, Math.min(1, args.solveMs / args.timeBudgetMs));
+  const decayed = args.basePoints - (args.basePoints - floor) * ratio;
+  let pts = Math.max(floor, Math.round(decayed));
+  if (args.allSix) pts += ALL_SIX_BONUS;
+  return pts;
 }

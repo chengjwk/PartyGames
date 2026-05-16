@@ -1,3 +1,12 @@
+// MathHive server (v2).
+//
+// Per-player target streams over a shared digit pool. The server generates
+// one puzzle per round (6 unique digits + an operator set picked by
+// difficulty), enumerates all reachable values once, then samples a
+// candidate list to deal out as targets. Each player burns through their
+// own slice of that candidate list — when they solve or skip, the server
+// hands them another. Score = sum of time-decayed points − skip penalties.
+
 import type * as Party from "partykit/server";
 import type {
   ActiveBee,
@@ -9,24 +18,43 @@ import type {
 import { DEFAULT_CONFIG } from "../src/shared/types";
 import type {
   MathClientMessage,
+  MathLiveStat,
+  MathPlayerRoundResult,
   MathPrivatePlayerState,
   MathPublicGameState,
   MathRoundSummary,
   MathServerMessage,
-  ScoredEquation,
+  MathSkippedRecord,
+  MathSolveStep,
+  MathSolvedRecord,
+  MathTargetPublic,
 } from "../src/shared/math-types";
-import { generateMathPuzzle, type MathPuzzle } from "./mathhive-puzzle";
-import { validateEquation, scoreEquation } from "./mathhive-scoring";
+import {
+  SKIP_PENALTY,
+  TARGET_BASE_POINTS,
+  TARGET_FLOOR_POINTS,
+  TARGET_TIME_BUDGET_MS,
+  buildTargetCandidates,
+  generateMathPuzzle,
+  type MathPuzzle,
+} from "./mathhive-puzzle";
+import { scoreSolve, verifySolve } from "./mathhive-scoring";
 
 const COUNTDOWN_MS = 3000;
 const PAUSE_GRACE_MS = 3000;
-const BEE_DEPARTED_GRACE_MS = 5000;
-// Math mode: continuous bee coverage. First arrival 2s into the round so
-// players see the bare puzzle for a moment, then a fresh bee every 15s
-// with each one lasting exactly 15s — so there's always one on the board.
-const BEE_FIRST_OFFSET_MS = 2_000;
-const BEE_DURATION_MS = 15_000;
-const BEE_INTERVAL_MS = 15_000;
+
+interface PerPlayerRoundState {
+  currentTarget: MathTargetPublic | null;
+  // Index into puzzle.targetCandidates we'll draw from next. Wraps around
+  // if a fast solver burns through the deck.
+  cursor: number;
+  // Last target value handed out — used to avoid back-to-back duplicates
+  // for a single player.
+  lastValue: number | null;
+  solved: MathSolvedRecord[];
+  skipped: MathSkippedRecord[];
+  scoreThisRound: number;
+}
 
 export default class MathHiveServer implements Party.Server {
   // ───────── identity / connection state ─────────
@@ -41,11 +69,15 @@ export default class MathHiveServer implements Party.Server {
   private currentRound = 0;
   private hostPlayerId: string | null = null;
   private totalScores = new Map<string, number>();
+
   private puzzle: MathPuzzle | null = null;
+  private targetCandidates: number[] = [];
+  private perPlayer = new Map<string, PerPlayerRoundState>();
+  // Records across the whole game per player (for FINAL_RESULTS top-solves).
+  private allSolvesByPlayer = new Map<string, MathSolvedRecord[]>();
+
   private roundStartsAt: number | null = null;
   private roundEndsAt: number | null = null;
-  private foundByPlayer = new Map<string, ScoredEquation[]>();
-  private firstFinder = new Map<string, string>();
   private roundSummary: MathRoundSummary | null = null;
   private roundTimer: ReturnType<typeof setTimeout> | null = null;
   private startTimer: ReturnType<typeof setTimeout> | null = null;
@@ -55,12 +87,10 @@ export default class MathHiveServer implements Party.Server {
   private pauseGraceTimer: ReturnType<typeof setTimeout> | null = null;
   private pausedAt: number | null = null;
 
-  private beeSchedule: Array<{ arriveAt: number; queen?: boolean }> = [];
   private bees: ActiveBee[] = [];
-  private recentBees: Array<{ letter: string; expiresAt: number }> = [];
 
   private gameStats: GameStats = { longest: null, highest: null };
-  private allEquationsByPlayer = new Map<string, ScoredEquation[]>();
+  private nextTargetSerial = 1;
 
   constructor(readonly room: Party.Room) {}
 
@@ -112,8 +142,11 @@ export default class MathHiveServer implements Party.Server {
       case "startGame":
         if (this.isHost(sender)) this.handleStartGame();
         return;
-      case "submitEquation":
-        this.handleSubmit(sender, msg);
+      case "solveTarget":
+        this.handleSolve(sender, msg);
+        return;
+      case "skipTarget":
+        this.handleSkip(sender, msg);
         return;
       case "nextRound":
         if (this.isHost(sender)) this.handleNextRound();
@@ -162,6 +195,17 @@ export default class MathHiveServer implements Party.Server {
     this.connToClient.set(sender.id, msg.clientId);
     if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)?.connected) {
       this.hostPlayerId = this.electHost();
+    }
+    // If joining mid-round and we don't have a target for this player yet,
+    // deal one. (Auto-pause usually fires before this matters, but be
+    // robust about it.)
+    if (this.phase === "ROUND_PLAYING") {
+      const st = this.perPlayer.get(msg.clientId);
+      if (!st) {
+        this.perPlayer.set(msg.clientId, this.makeInitialPlayerState());
+      }
+      const cur = this.perPlayer.get(msg.clientId)!;
+      if (!cur.currentTarget) this.dealNextTarget(msg.clientId);
     }
     this.maybeResume();
     this.broadcastState();
@@ -214,6 +258,13 @@ export default class MathHiveServer implements Party.Server {
     if (typeof msg.config.easyMode === "boolean") {
       next.easyMode = msg.config.easyMode;
     }
+    if (
+      msg.config.mathDifficulty === "easy" ||
+      msg.config.mathDifficulty === "medium" ||
+      msg.config.mathDifficulty === "hard"
+    ) {
+      next.mathDifficulty = msg.config.mathDifficulty;
+    }
     this.config = next;
     this.broadcastState();
   }
@@ -225,15 +276,18 @@ export default class MathHiveServer implements Party.Server {
     for (const cid of this.players.keys()) this.totalScores.set(cid, 0);
     this.currentRound = 0;
     this.gameStats = { longest: null, highest: null };
-    this.allEquationsByPlayer.clear();
+    this.allSolvesByPlayer.clear();
     this.beginCountdown();
   }
 
   private beginCountdown() {
     this.currentRound += 1;
-    this.puzzle = generateMathPuzzle();
-    this.foundByPlayer.clear();
-    this.firstFinder.clear();
+    this.puzzle = generateMathPuzzle(this.config.mathDifficulty);
+    this.targetCandidates = buildTargetCandidates(this.puzzle);
+    this.perPlayer.clear();
+    for (const cid of this.players.keys()) {
+      this.perPlayer.set(cid, this.makeInitialPlayerState());
+    }
     this.roundSummary = null;
     this.roundEndsAt = null;
     this.roundStartsAt = Date.now() + COUNTDOWN_MS;
@@ -252,9 +306,10 @@ export default class MathHiveServer implements Party.Server {
     this.phase = "ROUND_PLAYING";
     if (this.roundTimer) clearTimeout(this.roundTimer);
     this.roundTimer = setTimeout(() => this.endRound(), durMs);
-    this.buildBeeSchedule(Date.now(), durMs);
-    this.scheduleNextBeeEvent();
+    // Hand each player their opening target.
+    for (const cid of this.players.keys()) this.dealNextTarget(cid);
     this.broadcastState();
+    this.broadcastAllPrivate();
   }
 
   private endRound() {
@@ -263,21 +318,46 @@ export default class MathHiveServer implements Party.Server {
       clearTimeout(this.roundTimer);
       this.roundTimer = null;
     }
-    this.clearBee();
-    const perPlayer = [...this.players.values()].map((p) => {
-      const equations = this.foundByPlayer.get(p.id) ?? [];
-      const scoreThisRound = equations.reduce((s, e) => s + e.points, 0);
-      return { playerId: p.id, equations, scoreThisRound };
-    });
-    for (const r of perPlayer) {
+    const perPlayer: MathPlayerRoundResult[] = [];
+    for (const p of this.players.values()) {
+      const st = this.perPlayer.get(p.id);
+      if (!st) {
+        perPlayer.push({
+          playerId: p.id,
+          scoreThisRound: 0,
+          solved: [],
+          skipped: [],
+        });
+        continue;
+      }
+      perPlayer.push({
+        playerId: p.id,
+        scoreThisRound: st.scoreThisRound,
+        solved: st.solved,
+        skipped: st.skipped,
+      });
       this.totalScores.set(
-        r.playerId,
-        (this.totalScores.get(r.playerId) ?? 0) + r.scoreThisRound,
+        p.id,
+        (this.totalScores.get(p.id) ?? 0) + st.scoreThisRound,
       );
-      const all = this.allEquationsByPlayer.get(r.playerId) ?? [];
-      this.allEquationsByPlayer.set(r.playerId, [...all, ...r.equations]);
+      const acc = this.allSolvesByPlayer.get(p.id) ?? [];
+      this.allSolvesByPlayer.set(p.id, [...acc, ...st.solved]);
+      // Game stats: highest single solve.
+      for (const r of st.solved) {
+        if (!this.gameStats.highest || r.points > this.gameStats.highest.points) {
+          this.gameStats.highest = {
+            word: String(r.targetValue),
+            points: r.points,
+            playerId: p.id,
+          };
+        }
+      }
     }
-    this.roundSummary = { digits: this.puzzle.outerDigits, perPlayer };
+    this.roundSummary = {
+      digits: this.puzzle.digits,
+      operators: this.puzzle.operators,
+      perPlayer,
+    };
     this.roundEndsAt = null;
     this.phase = "ROUND_RESULTS";
     this.broadcastState();
@@ -299,8 +379,8 @@ export default class MathHiveServer implements Party.Server {
     this.currentRound = 0;
     this.totalScores.clear();
     this.puzzle = null;
-    this.foundByPlayer.clear();
-    this.firstFinder.clear();
+    this.targetCandidates = [];
+    this.perPlayer.clear();
     this.roundSummary = null;
     this.roundStartsAt = null;
     this.roundEndsAt = null;
@@ -311,106 +391,153 @@ export default class MathHiveServer implements Party.Server {
       clearTimeout(this.pauseGraceTimer);
       this.pauseGraceTimer = null;
     }
-    this.clearBee();
     this.gameStats = { longest: null, highest: null };
-    this.allEquationsByPlayer.clear();
+    this.allSolvesByPlayer.clear();
     this.broadcastState();
     this.broadcastAllPrivate();
   }
 
-  private handleSubmit(sender: Party.Connection, msg: { equation: string }) {
+  private handleSolve(
+    sender: Party.Connection,
+    msg: { targetId: string; steps: MathSolveStep[] },
+  ) {
     const cid = this.connToClient.get(sender.id);
     if (!cid) return;
     if (this.phase !== "ROUND_PLAYING" || !this.puzzle || this.paused) {
       this.send(sender, {
-        type: "submitResult",
-        equation: msg.equation,
+        type: "solveResult",
+        targetId: msg.targetId,
         ok: false,
         reason: "not_in_round",
       });
       return;
     }
+    const st = this.perPlayer.get(cid);
+    if (!st || !st.currentTarget || st.currentTarget.id !== msg.targetId) {
+      this.send(sender, {
+        type: "solveResult",
+        targetId: msg.targetId,
+        ok: false,
+        reason: "wrong_target",
+      });
+      return;
+    }
+    const target = st.currentTarget;
+    const verdict = verifySolve({
+      poolDigits: this.puzzle.digits,
+      allowedOperators: this.puzzle.operators,
+      steps: msg.steps,
+      target: target.value,
+    });
+    if (!verdict.ok) {
+      this.send(sender, {
+        type: "solveResult",
+        targetId: target.id,
+        ok: false,
+        reason: verdict.reason,
+      });
+      return;
+    }
     const now = Date.now();
-    this.recentBees = this.recentBees.filter((r) => r.expiresAt > now);
-    const extraDigits = new Set<string>();
-    for (const b of this.bees) extraDigits.add(b.letter);
-    for (const r of this.recentBees) extraDigits.add(r.letter);
-
-    const result = validateEquation(msg.equation, this.puzzle, extraDigits);
-    if (!result.ok) {
-      this.send(sender, {
-        type: "submitResult",
-        equation: msg.equation,
-        ok: false,
-        reason: result.reason,
-      });
-      return;
-    }
-
-    const found = this.foundByPlayer.get(cid) ?? [];
-    if (found.some((e) => e.equation === result.normalized)) {
-      this.send(sender, {
-        type: "submitResult",
-        equation: result.normalized,
-        ok: false,
-        reason: "already_found",
-      });
-      return;
-    }
-
-    const isFirst = !this.firstFinder.has(result.normalized);
-    if (isFirst) this.firstFinder.set(result.normalized, cid);
-
+    const solveMs = Math.max(0, now - target.startedAt);
     const player = this.players.get(cid);
     const playerMult = player?.scoreMultiplier ?? 1;
-    // Classic: bee letter usage gives a 2x multiplier. Swarm: bee multipliers
-    // (not implemented yet for math — punt to "skip swarm in math v1").
-    // The word benefits from the bee if it uses any digit that's currently
-    // (or recently was) a bee letter. Allows duplicate bees to still boost.
-    const beeLetters = new Set<string>();
-    for (const b of this.bees) beeLetters.add(b.letter);
-    for (const r of this.recentBees) beeLetters.add(r.letter);
-    const usedBee = result.digitChars.some((d) => beeLetters.has(d));
-    let m = 1;
-    if (usedBee) m *= 2;
-    m *= playerMult;
-    const base = scoreEquation({
-      validation: result,
-      puzzle: this.puzzle,
-      firstFinder: isFirst,
+    const basePts = scoreSolve({
+      basePoints: target.basePoints,
+      floorPoints: target.floorPoints,
+      timeBudgetMs: target.timeBudgetMs,
+      solveMs,
+      allSix: verdict.allSix,
     });
-    const scored: ScoredEquation = {
-      ...base,
-      points: Math.round(base.points * m),
-      beeBonus: usedBee,
+    const points = Math.round(basePts * playerMult);
+    st.scoreThisRound += points;
+    const record: MathSolvedRecord = {
+      targetId: target.id,
+      targetValue: target.value,
+      points,
+      solveMs,
+      allSix: verdict.allSix,
     };
-    found.push(scored);
-    this.foundByPlayer.set(cid, found);
-
-    if (
-      !this.gameStats.longest ||
-      result.normalized.length > this.gameStats.longest.word.length
-    ) {
-      this.gameStats.longest = { word: result.normalized, playerId: cid };
-    }
-    if (!this.gameStats.highest || scored.points > this.gameStats.highest.points) {
-      this.gameStats.highest = {
-        word: result.normalized,
-        points: scored.points,
-        playerId: cid,
-      };
-    }
-
+    st.solved.push(record);
     this.send(sender, {
-      type: "submitResult",
-      equation: result.normalized,
+      type: "solveResult",
+      targetId: target.id,
       ok: true,
-      points: scored.points,
-      pangram: scored.pangram,
-      firstFinder: scored.firstFinder,
+      points,
+      allSix: verdict.allSix,
+      solveMs,
     });
+    this.dealNextTarget(cid);
     this.sendPrivate(sender);
-    if (this.config.easyMode) this.broadcastState();
+    this.broadcastState();
+  }
+
+  private handleSkip(sender: Party.Connection, msg: { targetId: string }) {
+    const cid = this.connToClient.get(sender.id);
+    if (!cid) return;
+    if (this.phase !== "ROUND_PLAYING" || !this.puzzle || this.paused) return;
+    const st = this.perPlayer.get(cid);
+    if (!st || !st.currentTarget || st.currentTarget.id !== msg.targetId) {
+      this.send(sender, { type: "skipResult", targetId: msg.targetId, ok: false });
+      return;
+    }
+    const target = st.currentTarget;
+    st.scoreThisRound += SKIP_PENALTY;
+    st.skipped.push({ targetId: target.id, targetValue: target.value });
+    this.send(sender, { type: "skipResult", targetId: target.id, ok: true });
+    this.dealNextTarget(cid);
+    this.sendPrivate(sender);
+    this.broadcastState();
+  }
+
+  private makeInitialPlayerState(): PerPlayerRoundState {
+    return {
+      currentTarget: null,
+      cursor: Math.floor(Math.random() * Math.max(1, this.targetCandidates.length)),
+      lastValue: null,
+      solved: [],
+      skipped: [],
+      scoreThisRound: 0,
+    };
+  }
+
+  private dealNextTarget(playerId: string) {
+    if (!this.puzzle) return;
+    const st = this.perPlayer.get(playerId);
+    if (!st) return;
+    if (this.targetCandidates.length === 0) {
+      // No candidates (extremely thin pool) — synthesize a fallback target.
+      st.currentTarget = null;
+      return;
+    }
+    // Pick the next value, avoiding back-to-back duplicate for this player.
+    let value: number | null = null;
+    for (let i = 0; i < this.targetCandidates.length; i++) {
+      const candidate = this.targetCandidates[st.cursor % this.targetCandidates.length];
+      st.cursor++;
+      if (candidate !== st.lastValue) {
+        value = candidate;
+        break;
+      }
+    }
+    if (value === null) value = this.targetCandidates[0];
+    st.lastValue = value;
+    const info = this.puzzle.reachable.get(value);
+    const minOps = info ? Math.max(1, Math.min(5, info.minOps)) : 2;
+    const basePoints =
+      TARGET_BASE_POINTS[minOps] ?? TARGET_BASE_POINTS[2];
+    const timeBudgetMs =
+      TARGET_TIME_BUDGET_MS[minOps] ?? TARGET_TIME_BUDGET_MS[2];
+    const target: MathTargetPublic = {
+      id: `T${this.nextTargetSerial++}`,
+      value,
+      minOps,
+      timeBudgetMs,
+      basePoints,
+      floorPoints: TARGET_FLOOR_POINTS,
+      startedAt: Date.now(),
+    };
+    st.currentTarget = target;
   }
 
   // ───────── pause/resume ─────────
@@ -435,7 +562,6 @@ export default class MathHiveServer implements Party.Server {
       clearTimeout(this.roundTimer);
       this.roundTimer = null;
     }
-    this.room.storage.deleteAlarm().catch(() => {});
     this.roundEndsAt = null;
     this.paused = true;
     this.pausedAt = now;
@@ -468,12 +594,16 @@ export default class MathHiveServer implements Party.Server {
     if (this.phase === "ROUND_PLAYING") {
       this.roundEndsAt = now + remaining;
       this.roundTimer = setTimeout(() => this.endRound(), remaining);
-      for (const ev of this.beeSchedule) ev.arriveAt += pauseDuration;
-      for (const b of this.bees) b.leaveAt += pauseDuration;
-      for (const r of this.recentBees) r.expiresAt += pauseDuration;
-      this.scheduleNextBeeEvent();
+      // Shift each player's current-target start so the points-clock
+      // doesn't lurch past their effective time budget.
+      for (const st of this.perPlayer.values()) {
+        if (st.currentTarget) {
+          st.currentTarget.startedAt += pauseDuration;
+        }
+      }
     }
     this.broadcastState();
+    this.broadcastAllPrivate();
   }
 
   private handleTogglePause() {
@@ -501,13 +631,12 @@ export default class MathHiveServer implements Party.Server {
       clearTimeout(this.pauseGraceTimer);
       this.pauseGraceTimer = null;
     }
-    this.clearBee();
     this.phase = "LOBBY";
     this.currentRound = 0;
     this.totalScores.clear();
     this.puzzle = null;
-    this.foundByPlayer.clear();
-    this.firstFinder.clear();
+    this.targetCandidates = [];
+    this.perPlayer.clear();
     this.roundSummary = null;
     this.roundStartsAt = null;
     this.roundEndsAt = null;
@@ -515,98 +644,9 @@ export default class MathHiveServer implements Party.Server {
     this.pauseRemainingMs = null;
     this.pausedAt = null;
     this.gameStats = { longest: null, highest: null };
-    this.allEquationsByPlayer.clear();
+    this.allSolvesByPlayer.clear();
     this.broadcastState();
     this.broadcastAllPrivate();
-  }
-
-  // ───────── bees (classic only for math v1) ─────────
-  private buildBeeSchedule(roundStart: number, durMs: number) {
-    this.beeSchedule = [];
-    if (!this.puzzle) return;
-    // Classic cadence: first at +15s, lasts 15s, every 30s.
-    for (let t = BEE_FIRST_OFFSET_MS; t + BEE_DURATION_MS <= durMs; t += BEE_INTERVAL_MS) {
-      this.beeSchedule.push({ arriveAt: roundStart + t });
-    }
-  }
-
-  private scheduleNextBeeEvent() {
-    const now = Date.now();
-    let nextAt: number | null = null;
-    if (this.beeSchedule[0]) nextAt = this.beeSchedule[0].arriveAt;
-    for (const b of this.bees) {
-      if (nextAt === null || b.leaveAt < nextAt) nextAt = b.leaveAt;
-    }
-    if (nextAt === null) {
-      this.room.storage.deleteAlarm().catch(() => {});
-      return;
-    }
-    const target = Math.max(now + 10, nextAt);
-    this.room.storage.setAlarm(target).catch(() => {});
-  }
-
-  async onAlarm() {
-    try {
-      this.processBeeEvents();
-    } catch (e) {
-      console.error("[math/bees] onAlarm threw:", e);
-      this.room.storage.setAlarm(Date.now() + 1000).catch(() => {});
-    }
-  }
-
-  private processBeeEvents() {
-    if (this.phase !== "ROUND_PLAYING" || this.paused) return;
-    const now = Date.now();
-    let changed = false;
-    const remaining: ActiveBee[] = [];
-    for (const b of this.bees) {
-      if (b.leaveAt <= now) {
-        this.recentBees.push({ letter: b.letter, expiresAt: now + BEE_DEPARTED_GRACE_MS });
-        changed = true;
-      } else {
-        remaining.push(b);
-      }
-    }
-    this.bees = remaining;
-    while (this.beeSchedule.length > 0 && this.beeSchedule[0].arriveAt <= now) {
-      const ev = this.beeSchedule.shift()!;
-      const bee = this.spawnBee(ev);
-      if (bee) {
-        this.bees.push(bee);
-        changed = true;
-      }
-    }
-    if (changed) this.broadcastState();
-    this.scheduleNextBeeEvent();
-  }
-
-  private spawnBee(ev: { arriveAt: number; queen?: boolean }): ActiveBee | null {
-    if (!this.puzzle) return null;
-    const digit = this.pickBeeDigit();
-    return {
-      letter: digit, // ActiveBee's "letter" field carries the bee digit
-      slot: -1,
-      multiplier: 1,
-      leaveAt: ev.arriveAt + BEE_DURATION_MS,
-    };
-  }
-
-  private pickBeeDigit(): string {
-    // Any digit 0-9 — overlap with puzzle digits is allowed. (If a bee
-    // brings a duplicate, the visible board doesn't gain a new digit, but
-    // words using that digit still get the bee 2x multiplier.)
-    const digits = "0123456789".split("");
-    // Avoid back-to-back identical bees (mildly confusing).
-    const lastBee = this.bees[this.bees.length - 1]?.letter;
-    const pool = lastBee ? digits.filter((d) => d !== lastBee) : digits;
-    return pool[Math.floor(Math.random() * pool.length)];
-  }
-
-  private clearBee() {
-    this.room.storage.deleteAlarm().catch(() => {});
-    this.bees = [];
-    this.beeSchedule = [];
-    this.recentBees = [];
   }
 
   // ───────── helpers ─────────
@@ -631,25 +671,23 @@ export default class MathHiveServer implements Party.Server {
   }
 
   private snapshot(): MathPublicGameState {
-    let liveCounts: Record<string, number> | null = null;
-    if (this.phase === "ROUND_PLAYING") {
-      liveCounts = {};
-      for (const [cid, eqs] of this.foundByPlayer) liveCounts[cid] = eqs.length;
+    let liveStats: Record<string, MathLiveStat> | null = null;
+    if (this.phase === "ROUND_PLAYING" || this.phase === "ROUND_RESULTS") {
+      liveStats = {};
+      for (const [cid, st] of this.perPlayer) {
+        liveStats[cid] = {
+          solved: st.solved.length,
+          skipped: st.skipped.length,
+          scoreThisRound: st.scoreThisRound,
+        };
+      }
     }
-    let easyModeStats: MathPublicGameState["easyModeStats"] = null;
-    if (
-      this.config.easyMode &&
-      this.puzzle &&
-      (this.phase === "ROUND_PLAYING" || this.phase === "ROUND_STARTING")
-    ) {
-      easyModeStats = { foundEquations: [...this.firstFinder.keys()].sort() };
-    }
-    let playerTopEquations: Record<string, ScoredEquation[]> | null = null;
+    let playerTopSolves: Record<string, MathSolvedRecord[]> | null = null;
     if (this.phase === "FINAL_RESULTS") {
-      playerTopEquations = {};
-      for (const [cid, eqs] of this.allEquationsByPlayer) {
-        playerTopEquations[cid] = [...eqs]
-          .sort((a, b) => b.points - a.points || b.equation.length - a.equation.length)
+      playerTopSolves = {};
+      for (const [cid, all] of this.allSolvesByPlayer) {
+        playerTopSolves[cid] = [...all]
+          .sort((a, b) => b.points - a.points)
           .slice(0, 10);
       }
     }
@@ -661,29 +699,30 @@ export default class MathHiveServer implements Party.Server {
       currentRound: this.currentRound,
       totalScores: Object.fromEntries(this.totalScores),
       puzzle: this.puzzle
-        ? {
-            centerOperator: this.puzzle.centerOperator,
-            outerDigits: this.puzzle.outerDigits,
-          }
+        ? { digits: this.puzzle.digits, operators: this.puzzle.operators }
         : null,
       roundStartsAt: this.roundStartsAt,
       roundEndsAt: this.roundEndsAt,
       roundSummary: this.roundSummary,
-      liveCounts,
+      liveStats,
       paused: this.paused,
       pauseRemainingMs: this.pauseRemainingMs,
       bees: this.bees,
       gameStats: this.gameStats,
-      easyModeStats,
-      playerTopEquations,
+      playerTopSolves,
     };
   }
 
   private privateFor(cid: string): MathPrivatePlayerState {
-    const eqs = this.foundByPlayer.get(cid) ?? [];
+    const st = this.perPlayer.get(cid);
+    if (!st) {
+      return { currentTarget: null, scoreThisRound: 0, solved: [], skipped: [] };
+    }
     return {
-      foundEquations: eqs,
-      scoreThisRound: eqs.reduce((s, e) => s + e.points, 0),
+      currentTarget: st.currentTarget,
+      scoreThisRound: st.scoreThisRound,
+      solved: st.solved,
+      skipped: st.skipped,
     };
   }
 

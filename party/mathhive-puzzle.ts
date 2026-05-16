@@ -1,74 +1,52 @@
-// MathHive puzzle generation.
+// MathHive puzzle generation (v2).
 //
-// Each round picks a center operator (+ − × ÷) plus 6 outer digits 0-9.
-// The center operator is the ONLY operator allowed in submitted equations,
-// just like the center letter is the only required letter in WordHive.
+// A round picks a pool of 6 UNIQUE digits drawn from 1-9 plus an operator
+// set determined by difficulty. Then we enumerate all integer values the
+// pool can reach via binary-op trees that consume a disjoint subset of the
+// pool. The server uses this reachable map to (a) hand each player a stream
+// of solvable targets, and (b) verify their submitted solution steps.
+//
+// Why precompute? 6 unique digits = 64 position subsets; the reachable set
+// per pool is bounded (we cap intermediate magnitudes), so enumeration runs
+// in well under 100ms. Doing it once per round beats validating each solve
+// against a fresh search.
 
-export type MathOperator = "+" | "-" | "*" | "/";
+import type { MathDifficulty, MathOperator } from "../src/shared/math-types";
+
+export interface ReachableEntry {
+  minOps: number; // smallest # of binary ops in any tree that reaches this value
+  // True iff there's a tree that uses ALL 6 pool digits and lands on this
+  // value. Drives the "all-six bonus" eligibility hint.
+  allSixOk: boolean;
+}
 
 export interface MathPuzzle {
-  centerOperator: MathOperator;
-  outerDigits: string[]; // length 6
-  digitSet: Set<string>; // unique digits available
-  digitMultiset: Map<string, number>;
+  digits: string[]; // length 6, unique, drawn from "1".."9"
+  operators: MathOperator[];
+  // value → reachability info. Keys are integer values the pool can reach.
+  reachable: Map<number, ReachableEntry>;
 }
 
-const DIGITS = "0123456789".split("");
+const POOL_SIZE = 6;
+// Cap intermediate magnitudes so multiplication doesn't explode the state
+// space. Values outside this window are pruned during enumeration.
+const VALUE_MIN = -200;
+const VALUE_MAX = 1000;
+
 const DIGIT_WEIGHT: Record<string, number> = {
-  "0": 4, "1": 8, "2": 8, "3": 8, "4": 7, "5": 7, "6": 6, "7": 5, "8": 5, "9": 4,
-};
-const OPERATOR_WEIGHT: Record<MathOperator, number> = {
-  "+": 4,
-  "-": 4,
-  "*": 3,
-  "/": 1, // division is hard with single digits — keep it rare
+  "1": 7, "2": 8, "3": 8, "4": 7, "5": 7, "6": 6, "7": 5, "8": 5, "9": 4,
 };
 
-function weightedPickOperator(): MathOperator {
-  const ops = Object.keys(OPERATOR_WEIGHT) as MathOperator[];
-  let total = 0;
-  for (const o of ops) total += OPERATOR_WEIGHT[o];
-  let r = Math.random() * total;
-  for (const o of ops) {
-    r -= OPERATOR_WEIGHT[o];
-    if (r <= 0) return o;
+export function operatorsForDifficulty(d: MathDifficulty): MathOperator[] {
+  switch (d) {
+    case "easy":
+      return ["+", "-"];
+    case "medium":
+    case "hard":
+      return ["+", "-", "*", "/"];
   }
-  return "+";
 }
 
-// Returns true if there's at least one valid equation of the form
-// "a op b = c" or "a op b = cd" (where c is a result built from puzzle digits).
-function isSolvable(digits: string[], op: MathOperator): boolean {
-  const allowed = new Set(digits);
-  for (const a of digits) {
-    for (const b of digits) {
-      const na = Number(a);
-      const nb = Number(b);
-      let r: number;
-      switch (op) {
-        case "+":
-          r = na + nb;
-          break;
-        case "-":
-          r = na - nb;
-          break;
-        case "*":
-          r = na * nb;
-          break;
-        case "/":
-          if (nb === 0 || na % nb !== 0) continue;
-          r = na / nb;
-          break;
-      }
-      if (r < 0) continue;
-      const rs = String(r);
-      if ([...rs].every((d) => allowed.has(d))) return true;
-    }
-  }
-  return false;
-}
-
-// Weighted-without-replacement: pick from `pool` using DIGIT_WEIGHT.
 function weightedDrawFromPool(pool: string[]): string {
   let total = 0;
   for (const d of pool) total += DIGIT_WEIGHT[d];
@@ -80,36 +58,208 @@ function weightedDrawFromPool(pool: string[]): string {
   return pool[0];
 }
 
-export function generateMathPuzzle(): MathPuzzle {
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const op = weightedPickOperator();
-    // Pick 6 UNIQUE digits from 0-9, weighted.
-    const pool = [...DIGITS];
-    const outerDigits: string[] = [];
-    while (outerDigits.length < 6 && pool.length > 0) {
+function popcount(n: number): number {
+  let c = 0;
+  while (n) {
+    c += n & 1;
+    n >>>= 1;
+  }
+  return c;
+}
+
+// Enumerate every value reachable by some binary-op tree consuming a subset
+// of the pool. Returns:
+//   states[bitmask] = Map<value, minOpsToReachWithThisExactSubset>
+// where bitmask indicates which pool positions the tree consumed.
+//
+// For 6 unique digits this finishes in well under 100ms with the magnitude
+// cap. The output is large enough (low thousands of entries) for sampling
+// to feel varied across rounds.
+function enumerateStates(
+  digits: number[],
+  ops: MathOperator[],
+): Map<number, Map<number, number>> {
+  const n = digits.length;
+  const fullMask = (1 << n) - 1;
+  const states = new Map<number, Map<number, number>>();
+  for (let i = 0; i < n; i++) {
+    const mask = 1 << i;
+    states.set(mask, new Map([[digits[i], 0]]));
+  }
+
+  for (let size = 2; size <= n; size++) {
+    for (let S = 1; S <= fullMask; S++) {
+      if (popcount(S) !== size) continue;
+      const sValues = new Map<number, number>();
+      // Iterate strict subsets A of S with A < B (canonical) so we don't
+      // count each (A, B) split twice. Non-commutative orderings are
+      // handled inside the op switch.
+      for (let A = (S - 1) & S; A > 0; A = (A - 1) & S) {
+        const B = S & ~A;
+        if (A >= B) continue;
+        const va = states.get(A);
+        const vb = states.get(B);
+        if (!va || !vb) continue;
+        for (const valA of va.keys()) {
+          for (const valB of vb.keys()) {
+            for (const op of ops) {
+              const candidates: number[] = [];
+              switch (op) {
+                case "+":
+                  candidates.push(valA + valB);
+                  break;
+                case "-":
+                  candidates.push(valA - valB);
+                  candidates.push(valB - valA);
+                  break;
+                case "*":
+                  candidates.push(valA * valB);
+                  break;
+                case "/":
+                  if (valB !== 0 && valA % valB === 0) candidates.push(valA / valB);
+                  if (valA !== 0 && valB % valA === 0) candidates.push(valB / valA);
+                  break;
+              }
+              const minOps = size - 1;
+              for (const r of candidates) {
+                if (!Number.isFinite(r)) continue;
+                if (r < VALUE_MIN || r > VALUE_MAX) continue;
+                if (!Number.isInteger(r)) continue;
+                const prior = sValues.get(r);
+                if (prior === undefined || prior > minOps) {
+                  sValues.set(r, minOps);
+                }
+              }
+            }
+          }
+        }
+      }
+      states.set(S, sValues);
+    }
+  }
+  return states;
+}
+
+function aggregateReachable(
+  states: Map<number, Map<number, number>>,
+  fullMask: number,
+): Map<number, ReachableEntry> {
+  const out = new Map<number, ReachableEntry>();
+  for (const [S, vals] of states) {
+    const isFull = S === fullMask;
+    for (const [v, ops] of vals) {
+      const existing = out.get(v);
+      if (!existing) {
+        out.set(v, { minOps: ops, allSixOk: isFull });
+      } else {
+        if (ops < existing.minOps) existing.minOps = ops;
+        if (isFull) existing.allSixOk = true;
+      }
+    }
+  }
+  return out;
+}
+
+export function generateMathPuzzle(difficulty: MathDifficulty): MathPuzzle {
+  const ops = operatorsForDifficulty(difficulty);
+  const allDigits = "123456789".split("");
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const pool = [...allDigits];
+    const digits: string[] = [];
+    while (digits.length < POOL_SIZE && pool.length > 0) {
       const d = weightedDrawFromPool(pool);
-      outerDigits.push(d);
+      digits.push(d);
       pool.splice(pool.indexOf(d), 1);
     }
-    if (outerDigits.length < 6) continue;
-    if (outerDigits.every((d) => d === "0")) continue;
-    if (!isSolvable(outerDigits, op)) continue;
-    const digitSet = new Set(outerDigits);
-    const multiset = new Map<string, number>();
-    for (const d of outerDigits) multiset.set(d, 1);
-    return {
-      centerOperator: op,
-      outerDigits,
-      digitSet,
-      digitMultiset: multiset,
-    };
+    if (digits.length < POOL_SIZE) continue;
+    const states = enumerateStates(
+      digits.map((d) => Number(d)),
+      ops,
+    );
+    const reachable = aggregateReachable(states, (1 << POOL_SIZE) - 1);
+    // Sanity check: require enough good targets (positive integers ≥ 10,
+    // reached with 2+ ops). Otherwise the pool is too thin — reroll.
+    let goodCount = 0;
+    for (const [v, info] of reachable) {
+      if (v >= 10 && v <= 100 && info.minOps >= 2) goodCount++;
+    }
+    if (goodCount < 10) continue;
+    return { digits, operators: ops, reachable };
   }
-  // Fallback deterministic puzzle.
-  const fallback = ["1", "2", "3", "4", "5", "6"];
+  // Fallback — deterministic puzzle to avoid hangs if RNG is pathological.
+  const digits = ["1", "2", "3", "4", "5", "6"];
+  const states = enumerateStates(
+    digits.map((d) => Number(d)),
+    ops,
+  );
   return {
-    centerOperator: "+",
-    outerDigits: fallback,
-    digitSet: new Set(fallback),
-    digitMultiset: new Map(fallback.map((d) => [d, 1])),
+    digits,
+    operators: ops,
+    reachable: aggregateReachable(states, (1 << POOL_SIZE) - 1),
   };
+}
+
+// Per-minOps time budget + base points + floor. The "budget" is how long
+// until the score decays to the floor; players still finish past the
+// budget, they just don't earn more for going faster.
+//
+// Tuning: feels right at the speed-vs-care trade-off. Quicker than these
+// and the all-six bonus becomes irrelevant; slower and chains feel sluggish.
+export const TARGET_TIME_BUDGET_MS: Record<number, number> = {
+  1: 5_000,
+  2: 8_000,
+  3: 12_000,
+  4: 16_000,
+  5: 22_000,
+};
+export const TARGET_BASE_POINTS: Record<number, number> = {
+  1: 5,
+  2: 8,
+  3: 11,
+  4: 14,
+  5: 17,
+};
+export const TARGET_FLOOR_POINTS = 1;
+export const ALL_SIX_BONUS = 5;
+export const SKIP_PENALTY = -1;
+
+// Build a sampled "slot" of valid target values for a pool. We want a mix
+// of difficulties so a round feels varied. Returns an array of values; the
+// server then assigns IDs and serves them one-at-a-time to players,
+// recycling once exhausted.
+export function buildTargetCandidates(puzzle: MathPuzzle): number[] {
+  const buckets: { easy: number[]; medium: number[]; hard: number[] } = {
+    easy: [],
+    medium: [],
+    hard: [],
+  };
+  const poolSet = new Set(puzzle.digits.map((d) => Number(d)));
+  for (const [v, info] of puzzle.reachable) {
+    if (v < 1) continue; // positive targets only for v1
+    if (v > 100) continue; // user constraint: targets 1-100 in easy/medium
+    // Skip values trivially on the pool (e.g., "make 5" when 5 is a tile).
+    if (info.minOps === 0 && poolSet.has(v)) continue;
+    if (info.minOps <= 1) buckets.easy.push(v);
+    else if (info.minOps <= 3) buckets.medium.push(v);
+    else buckets.hard.push(v);
+  }
+  // 25% easy / 55% medium / 20% hard, with sampling-with-replacement so a
+  // single tasty value can recur but back-to-back duplication is avoided
+  // by the server when issuing.
+  const out: number[] = [];
+  const sample = (arr: number[], count: number) => {
+    if (arr.length === 0) return;
+    for (let i = 0; i < count; i++) {
+      out.push(arr[Math.floor(Math.random() * arr.length)]);
+    }
+  };
+  sample(buckets.easy, 25);
+  sample(buckets.medium, 55);
+  sample(buckets.hard, 20);
+  // Shuffle so buckets aren't clustered
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }

@@ -1,3 +1,10 @@
+// MathHost (v2) — TV view for the new MathHive.
+//
+// In the new model, each player has their own private target stream, so the
+// TV's job is showing the shared digit pool (the "tools" everyone is using)
+// plus a live scoreboard of solves/skips and per-player totals. No
+// per-player targets are leaked; the TV is the room-level dashboard.
+
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
@@ -13,13 +20,18 @@ import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import Fireworks from "../components/Fireworks";
 import type {
   MathClientMessage,
+  MathDifficulty,
+  MathOperator,
   MathPublicGameState,
   MathServerMessage,
+  MathSolvedRecord,
 } from "../shared/math-types";
 import type { PublicGameState, RoundConfig } from "../shared/types";
 
 const ACCENT = "#6aa6ff";
 const ACCENT_FG = "#0a1a2a";
+
+const OP_GLYPH: Record<MathOperator, string> = { "+": "+", "-": "−", "*": "×", "/": "÷" };
 
 function useMathRoomSocket(roomCode: string) {
   const [state, setState] = useState<MathPublicGameState | null>(null);
@@ -176,13 +188,8 @@ function Lobby({
           <ConfigRow label="Round duration (sec)">
             <Stepper value={cfg.roundDurationSeconds} min={15} max={600} step={15} onChange={(v) => setCfg({ roundDurationSeconds: v })} />
           </ConfigRow>
-          <ConfigRow label="Show equations on TV">
-            <input
-              type="checkbox"
-              checked={cfg.easyMode}
-              onChange={(e) => setCfg({ easyMode: e.target.checked })}
-              style={{ width: 24, height: 24 }}
-            />
+          <ConfigRow label="Difficulty">
+            <DifficultyPicker value={cfg.mathDifficulty} onChange={(d) => setCfg({ mathDifficulty: d })} />
           </ConfigRow>
         </div>
         <button
@@ -194,6 +201,40 @@ function Lobby({
         </button>
       </section>
     </main>
+  );
+}
+
+function DifficultyPicker({
+  value,
+  onChange,
+}: {
+  value: MathDifficulty;
+  onChange: (d: MathDifficulty) => void;
+}) {
+  const options: { id: MathDifficulty; label: string }[] = [
+    { id: "easy", label: "Easy +−" },
+    { id: "medium", label: "Medium ×÷" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      {options.map((o) => (
+        <button
+          key={o.id}
+          onClick={() => onChange(o.id)}
+          style={{
+            padding: "8px 14px",
+            background: value === o.id ? ACCENT : "var(--bg-elev)",
+            color: value === o.id ? ACCENT_FG : "var(--fg)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            fontWeight: 600,
+            fontSize: 16,
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -260,123 +301,114 @@ function RoundPlaying({ state }: { state: MathPublicGameState }) {
     );
   }
   const players = state.players;
+  const live = state.liveStats ?? {};
   return (
     <main style={{ minHeight: "100dvh", padding: 32, display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, flex: 1 }}>
-        <section style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+        <section style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 }}>
           <div style={{ color: "var(--muted)", fontSize: 18 }}>Round {state.currentRound} of {state.config.totalRounds}</div>
           <Timer endsAt={state.roundEndsAt} />
-          <div style={{ marginTop: 24 }}>
-            <DigitHoneycomb
-              centerOperator={puzzle.centerOperator}
-              outerDigits={puzzle.outerDigits}
-            />
-          </div>
+          <DigitPool digits={puzzle.digits} operators={puzzle.operators} />
         </section>
         <section style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
           <h2 style={{ marginTop: 0, fontSize: 32 }}>Players</h2>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
-            {players.map((p) => (
-              <li
-                key={p.id}
-                style={{
-                  padding: "12px 16px",
-                  background: "var(--bg-elev)",
-                  borderRadius: 8,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  fontSize: 24,
-                  opacity: p.connected ? 1 : 0.4,
-                }}
-              >
-                <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <Avatar id={p.avatar} size={60} />
-                  <span>{p.name}</span>
-                </span>
-                <span style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
-                  {state.liveCounts && (
-                    <span style={{ color: "var(--muted)", fontSize: 16 }}>
-                      {state.liveCounts[p.id] ?? 0} found
+            {players.map((p) => {
+              const stats = live[p.id];
+              return (
+                <li
+                  key={p.id}
+                  style={{
+                    padding: "12px 16px",
+                    background: "var(--bg-elev)",
+                    borderRadius: 8,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    fontSize: 24,
+                    opacity: p.connected ? 1 : 0.4,
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <Avatar id={p.avatar} size={60} />
+                    <span>{p.name}</span>
+                  </span>
+                  <span style={{ display: "flex", gap: 16, alignItems: "baseline" }}>
+                    {stats && (
+                      <>
+                        <span style={{ color: "var(--muted)", fontSize: 15 }}>
+                          {stats.solved} solved
+                        </span>
+                        {stats.skipped > 0 && (
+                          <span style={{ color: "#ff8c8c", fontSize: 15 }}>
+                            {stats.skipped} skipped
+                          </span>
+                        )}
+                      </>
+                    )}
+                    <span style={{ color: "var(--fg)", fontSize: 22, fontWeight: 700 }}>
+                      {stats?.scoreThisRound ?? 0}
                     </span>
-                  )}
-                  <span style={{ color: "var(--muted)", fontSize: 16 }}>{state.totalScores[p.id] ?? 0} pts</span>
-                </span>
-              </li>
-            ))}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </section>
       </div>
-      {state.easyModeStats && (
-        <EasyModePanel found={state.easyModeStats.foundEquations} />
-      )}
     </main>
   );
 }
 
-const OP_GLYPH: Record<string, string> = { "+": "+", "-": "−", "*": "×", "/": "÷" };
-
-function DigitHoneycomb({
-  centerOperator,
-  outerDigits,
+function DigitPool({
+  digits,
+  operators,
 }: {
-  centerOperator: string;
-  outerDigits: string[];
+  digits: string[];
+  operators: MathOperator[];
 }) {
-  const HEX_R = 70;
-  const HEX_W = HEX_R * Math.sqrt(3);
-  const D = HEX_W;
-  const ext = D + HEX_W / 2 + 20;
   return (
-    <svg width={ext * 2} height={ext * 2} viewBox={`${-ext} ${-ext} ${ext * 2} ${ext * 2}`}>
-      <g>
-        <polygon points={hexPoints(HEX_R)} fill={ACCENT} stroke="var(--border)" strokeWidth={2} />
-        <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={HEX_R * 1.1} fontWeight={800} fill={ACCENT_FG}>
-          {OP_GLYPH[centerOperator] ?? centerOperator}
-        </text>
-      </g>
-      {outerDigits.map((d, i) => {
-        const angle = (Math.PI / 3) * i - Math.PI / 2;
-        const x = D * Math.cos(angle);
-        const y = D * Math.sin(angle);
-        return (
-          <g key={i} transform={`translate(${x} ${y})`}>
-            <polygon points={hexPoints(HEX_R)} fill="var(--bg-elev)" stroke="var(--border)" strokeWidth={2} />
-            <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={HEX_R * 0.95} fontWeight={800} fill="var(--fg)">{d}</text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-function hexPoints(r: number): string {
-  const pts: string[] = [];
-  for (let i = 0; i < 6; i++) {
-    const a = (Math.PI / 3) * i;
-    pts.push(`${(r * Math.cos(a)).toFixed(2)},${(r * Math.sin(a)).toFixed(2)}`);
-  }
-  return pts.join(" ");
-}
-
-function EasyModePanel({ found }: { found: string[] }) {
-  return (
-    <div style={{ padding: "14px 24px", background: "var(--bg-elev)", borderRadius: 14, display: "flex", alignItems: "center", gap: 20 }}>
-      <div style={{ fontSize: 22, fontWeight: 700, color: ACCENT, whiteSpace: "nowrap" }}>
-        {found.length} <span style={{ color: "var(--muted)", fontWeight: 400, fontSize: 14 }}>equations found</span>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", maxWidth: 460 }}>
+        {digits.map((d, i) => (
+          <div
+            key={i}
+            style={{
+              width: 88,
+              height: 88,
+              borderRadius: 16,
+              background: "var(--bg-elev)",
+              border: "2px solid var(--border)",
+              display: "grid",
+              placeItems: "center",
+              fontSize: 56,
+              fontWeight: 800,
+              color: "var(--fg)",
+            }}
+          >
+            {d}
+          </div>
+        ))}
       </div>
-      <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 5, maxHeight: 80, overflowY: "auto" }}>
-        {found.length === 0 ? (
-          <span style={{ color: "var(--muted)", fontSize: 14, fontStyle: "italic" }}>
-            Equations appear here as the room finds them.
-          </span>
-        ) : (
-          found.map((e) => (
-            <span key={e} style={{ background: "var(--bg)", padding: "3px 9px", borderRadius: 5, fontSize: 14, fontFamily: "ui-monospace, monospace", fontWeight: 600, color: "var(--muted)" }}>
-              {prettyEq(e)}
-            </span>
-          ))
-        )}
+      <div style={{ display: "flex", gap: 12 }}>
+        {operators.map((op) => (
+          <div
+            key={op}
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 12,
+              background: ACCENT,
+              color: ACCENT_FG,
+              display: "grid",
+              placeItems: "center",
+              fontSize: 36,
+              fontWeight: 800,
+            }}
+          >
+            {OP_GLYPH[op]}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -430,10 +462,14 @@ function RoundResults({
                   </span>
                   <div style={{ fontSize: 32, fontWeight: 800 }}>+{r.scoreThisRound}</div>
                 </div>
-                {r.equations.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 14 }}>
-                    {r.equations.map((eq) => (
-                      <EquationChip key={eq.equation} eq={eq} />
+                <div style={{ fontSize: 16, opacity: 0.85, marginTop: 4 }}>
+                  Solved {r.solved.length}
+                  {r.skipped.length > 0 && ` · Skipped ${r.skipped.length}`}
+                </div>
+                {r.solved.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+                    {r.solved.map((s) => (
+                      <SolveChip key={s.targetId} record={s} />
                     ))}
                   </div>
                 )}
@@ -446,22 +482,22 @@ function RoundResults({
   );
 }
 
-function EquationChip({ eq }: { eq: { equation: string; points: number; pangram: boolean; firstFinder: boolean } }) {
+function SolveChip({ record }: { record: MathSolvedRecord }) {
   return (
     <span
       style={{
-        background: eq.pangram ? ACCENT : "var(--bg)",
-        color: eq.pangram ? ACCENT_FG : "var(--fg)",
+        background: record.allSix ? ACCENT : "var(--bg)",
+        color: record.allSix ? ACCENT_FG : "var(--fg)",
         border: "1px solid var(--border)",
         padding: "6px 14px",
         borderRadius: 8,
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: 700,
         fontFamily: "ui-monospace, monospace",
       }}
     >
-      {prettyEq(eq.equation)} <span style={{ opacity: 0.7, fontSize: 16 }}>+{eq.points}</span>
-      {eq.firstFinder && <span style={{ marginLeft: 4 }}>★</span>}
+      {record.targetValue} <span style={{ opacity: 0.7, fontSize: 14 }}>+{record.points}</span>
+      {record.allSix && <span style={{ marginLeft: 4 }}>★</span>}
     </span>
   );
 }
@@ -507,7 +543,7 @@ function FinalResults({
         <ol style={{ listStyle: "none", padding: 0, margin: "32px 0 0", display: "grid", gap: 18 }}>
           {ranked.map((row, i) => {
             const isWinner = i === 0;
-            const topEqs = state.playerTopEquations?.[row.player.id] ?? [];
+            const topSolves = state.playerTopSolves?.[row.player.id] ?? [];
             return (
               <li
                 key={row.player.id}
@@ -533,14 +569,14 @@ function FinalResults({
                     </span>
                     <strong style={{ fontSize: 36 }}>{row.total} pts</strong>
                   </div>
-                  {topEqs.length > 0 && (
+                  {topSolves.length > 0 && (
                     <div style={{ marginTop: 14 }}>
                       <div style={{ fontSize: 13, opacity: 0.65, textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, marginBottom: 8 }}>
-                        Top {topEqs.length} equation{topEqs.length === 1 ? "" : "s"}
+                        Top {topSolves.length} solve{topSolves.length === 1 ? "" : "s"}
                       </div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {topEqs.map((eq) => (
-                          <EquationChip key={eq.equation} eq={eq} />
+                        {topSolves.map((s) => (
+                          <SolveChip key={s.targetId} record={s} />
                         ))}
                       </div>
                     </div>
@@ -556,8 +592,4 @@ function FinalResults({
       </main>
     </>
   );
-}
-
-function prettyEq(eq: string): string {
-  return eq.replace(/\*/g, "×").replace(/\//g, "÷");
 }

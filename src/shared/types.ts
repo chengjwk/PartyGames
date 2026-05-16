@@ -26,11 +26,16 @@ export interface ActiveBee {
   queen?: boolean;
 }
 
+export type MathDifficulty = "easy" | "medium" | "hard";
+
 export interface RoundConfig {
   totalRounds: number;
   roundDurationSeconds: number;
   easyMode: boolean;
   mode: GameMode;
+  // MathHive-only: difficulty selects the operator set and (in v1.1+) hard's
+  // auto-reroll behavior. WordHive ignores this field.
+  mathDifficulty: MathDifficulty;
 }
 
 export const DEFAULT_CONFIG: RoundConfig = {
@@ -38,6 +43,7 @@ export const DEFAULT_CONFIG: RoundConfig = {
   roundDurationSeconds: 60,
   easyMode: true,
   mode: "classic",
+  mathDifficulty: "medium",
 };
 
 export const SWARM_MIN_DURATION_SECONDS = 60;
