@@ -607,7 +607,14 @@ function DrawView({
           flex: 1,
         }}
       >
-        <DrawingCanvas onSubmit={onSubmit} promptWord={task.promptedWord} />
+        <DrawingCanvas
+          onSubmit={onSubmit}
+          promptWord={task.promptedWord}
+          // When the server's draw-phase deadline approaches, the
+          // canvas auto-submits whatever the player has so far —
+          // beats the server's empty auto-fill to the punch.
+          autoSubmitAt={task.phaseEndsAt}
+        />
       </div>
     </main>
   );

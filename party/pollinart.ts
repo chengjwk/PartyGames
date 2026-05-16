@@ -60,7 +60,9 @@ interface PollinartConfig {
 
 const DEFAULT_CONFIG: PollinartConfig = {
   totalRounds: 3,
-  drawSeconds: 45,
+  // 60s instead of 45 — playtest feedback was that 45s clipped too
+  // many drawings mid-execution.
+  drawSeconds: 60,
   guessSeconds: 15,
   pickSeconds: 10,
   complexity: "easy",
@@ -1118,22 +1120,52 @@ function levenshtein(a: string, b: string): number {
   return prev[b.length];
 }
 
-// Clip incoming drawing to a safe size: max 200 strokes, 500 points each.
-// Stops a malicious client from blasting megabyte payloads through.
+// Clip incoming drawing to a safe size: max 200 marks, 500 points each
+// stroke. Stops a malicious client from blasting megabyte payloads through.
 function sanitizeDrawing(d: Drawing | undefined | null): Drawing {
   if (!d || !Array.isArray(d.strokes)) return { strokes: [] };
-  const strokes = d.strokes.slice(0, 200).map((s) => ({
-    color: typeof s.color === "string" ? s.color.slice(0, 20) : "#000",
-    width: typeof s.width === "number" ? clamp(s.width, 0.5, 60) : 4,
-    erase: !!s.erase,
-    points: Array.isArray(s.points)
-      ? s.points.slice(0, 500).map((p) => ({
-          x: clamp(Number(p.x) || 0, 0, 1000),
-          y: clamp(Number(p.y) || 0, 0, 1000),
-        }))
-      : [],
-  }));
-  return { strokes };
+  const out: Drawing["strokes"] = [];
+  for (const s of d.strokes.slice(0, 200)) {
+    if (!s || typeof s !== "object") continue;
+    const color =
+      typeof (s as { color?: unknown }).color === "string"
+        ? (s as { color: string }).color.slice(0, 20)
+        : "#000";
+    // Fill mark — discriminator may be missing on older clients during
+    // a rolling deploy; treat anything with x+y but no points as a fill.
+    if (
+      (s as { kind?: string }).kind === "fill" ||
+      (typeof (s as { x?: unknown }).x === "number" &&
+        typeof (s as { y?: unknown }).y === "number" &&
+        !Array.isArray((s as { points?: unknown }).points))
+    ) {
+      out.push({
+        kind: "fill",
+        color,
+        x: clamp(Number((s as { x?: unknown }).x) || 0, 0, 1000),
+        y: clamp(Number((s as { y?: unknown }).y) || 0, 0, 1000),
+      });
+      continue;
+    }
+    out.push({
+      kind: "stroke",
+      color,
+      width:
+        typeof (s as { width?: unknown }).width === "number"
+          ? clamp((s as { width: number }).width, 0.5, 60)
+          : 4,
+      erase: !!(s as { erase?: unknown }).erase,
+      points: Array.isArray((s as { points?: unknown }).points)
+        ? ((s as { points: Array<{ x: number; y: number }> }).points
+            .slice(0, 500)
+            .map((p) => ({
+              x: clamp(Number(p.x) || 0, 0, 1000),
+              y: clamp(Number(p.y) || 0, 0, 1000),
+            })))
+        : [],
+    });
+  }
+  return { strokes: out };
 }
 
 PollinartServer satisfies Party.Worker;

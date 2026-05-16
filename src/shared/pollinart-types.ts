@@ -18,15 +18,30 @@ import type { Phase, Player } from "./types";
 
 export type PollinartComplexity = "easy" | "medium" | "hard";
 
-// A single drawing payload — stroke list in normalized 0..1000 coords so
-// the receiver can render at any display size.
-export interface DrawStroke {
-  color: string;       // CSS color, restricted to the palette + eraser
+// A single mark in a drawing — either a pen stroke (or eraser stroke,
+// which paints in the canvas background color) or a flood-fill operation.
+// Coordinates are normalized to 0..1000 so receivers can render at any
+// display size. The fill mark just stores its seed point + target color
+// — the receiver re-runs the flood fill against the canvas state up to
+// that point, giving deterministic playback as long as both sides
+// render the prior marks identically.
+export type DrawStroke = StrokeMark | FillMark;
+
+export interface StrokeMark {
+  kind: "stroke";
+  color: string;       // CSS hex color
   width: number;       // brush width in normalized units (1..40 typical)
   points: Array<{ x: number; y: number }>;
   // True if this stroke was drawn with the eraser tool — receiver should
   // paint in the canvas background color, not stroke.color.
   erase?: boolean;
+}
+
+export interface FillMark {
+  kind: "fill";
+  color: string;       // CSS hex color
+  x: number;           // seed point in 0..1000 normalized coords
+  y: number;
 }
 
 export interface Drawing {
