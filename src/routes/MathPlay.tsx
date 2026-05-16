@@ -25,6 +25,7 @@ import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import GameMenu from "../components/GameMenu";
 import Fireworks from "../components/Fireworks";
+import BuiltHive from "../components/BuiltHive";
 import type {
   MathClientMessage,
   MathDifficulty,
@@ -135,6 +136,11 @@ export default function MathPlay() {
   );
   const [joined, setJoined] = useState(false);
   const autoJoinedRef = useRef(false);
+  // Total pool-digits the player has contributed to "the hive" across the
+  // current game. Persists across rounds (so the player sees one growing
+  // hive over multiple rounds); resets when the game ends and they return
+  // to the lobby.
+  const [hiveHexes, setHiveHexes] = useState(0);
 
   const join = (n: string, a: string) => {
     const trimmed = n.trim();
@@ -157,6 +163,12 @@ export default function MathPlay() {
       join(savedName, avatar);
     }
   }, [state, joined, clientId]);
+
+  // Hive resets when a fresh game starts — phase goes back to LOBBY (either
+  // first ever arrival or after Play Again).
+  useEffect(() => {
+    if (state?.phase === "LOBBY") setHiveHexes(0);
+  }, [state?.phase]);
 
   // Reconnect handler — re-send join on every socket re-open so the
   // server reassociates the new connection with our clientId. Without
@@ -226,6 +238,8 @@ export default function MathPlay() {
           privateState={privateState}
           lastSolveResult={lastSolveResult}
           send={send}
+          hiveHexes={hiveHexes}
+          addHiveHexes={(n) => setHiveHexes((c) => c + n)}
         />
       );
       break;
@@ -658,6 +672,8 @@ function Round({
   privateState,
   lastSolveResult,
   send,
+  hiveHexes,
+  addHiveHexes,
 }: {
   state: MathPublicGameState;
   privateState: MathPrivatePlayerState | null;
@@ -665,9 +681,17 @@ function Round({
     | { targetId: string; ok: boolean; reason?: string; points?: number; allSix?: boolean; solveMs?: number; at: number }
     | null;
   send: (m: MathClientMessage) => void;
+  hiveHexes: number;
+  addHiveHexes: (n: number) => void;
 }) {
   const puzzle = state.puzzle;
   const target = privateState?.currentTarget ?? null;
+
+  // When we fire solveTarget, record how many pool digits the submitted
+  // solution used. On the server's ok response, those digits get deposited
+  // into the hive — the "bees built N hexes worth of work." Cleared on
+  // server response (ok or fail) so we never double-count.
+  const pendingHexesRef = useRef(new Map<string, number>());
 
   // Workspace state — reset whenever the target changes.
   //
@@ -702,9 +726,17 @@ function Round({
     setErrorFlash(null);
   }, [target?.id, puzzle?.digits.join(",")]);
 
-  // Toast feedback from solve/skip results.
+  // Toast feedback from solve/skip results. Also drives the hive: any
+  // pending pool-digit count we recorded when sending the solveTarget
+  // gets deposited into the hive once the server says "ok" (or discarded
+  // on a fail/wrong_target).
   useEffect(() => {
     if (!lastSolveResult) return;
+    const pending = pendingHexesRef.current.get(lastSolveResult.targetId);
+    if (pending !== undefined) {
+      pendingHexesRef.current.delete(lastSolveResult.targetId);
+      if (lastSolveResult.ok && pending > 0) addHiveHexes(pending);
+    }
     if (lastSolveResult.ok) {
       if (lastSolveResult.allSix) sounds.pangram();
       else sounds.good();
@@ -794,6 +826,11 @@ function Round({
     setSel({ tile1: null, tile2: null, op: null });
     sounds.tick();
     if (target && result.value === target.value) {
+      // Capture the pool-digit count for the hive metaphor before sending.
+      // The server confirms (or rejects) async; the hive update fires when
+      // lastSolveResult arrives.
+      const mask = finalStepsMask(result.steps);
+      pendingHexesRef.current.set(target.id, popcount(mask));
       send({ type: "solveTarget", targetId: target.id, steps: result.steps });
     }
   };
@@ -980,7 +1017,11 @@ function Round({
         </button>
       </div>
 
-      <SolvedStrip solved={privateState?.solved ?? []} skipped={privateState?.skipped ?? []} />
+      {/* Bees building the hive. Replaces the in-round solved-chip list —
+          mid-play there's no real need to review past targets, and the
+          subtle growing honeycomb is more rewarding visual feedback. The
+          full chip history is still shown on the ROUND_RESULTS screen. */}
+      <BuiltHive hexCount={hiveHexes} />
     </main>
   );
 }
@@ -1404,11 +1445,12 @@ function renderHint(tile1: Tile | null, tile2: Tile | null, op: MathOperator | n
   return "Tap tiles and an operator (any order)";
 }
 
-// Walk the steps tree to determine which pool positions were used.
-function coversAllPositions(steps: MathSolveStep[], poolSize: number): boolean {
-  if (steps.length === 0) return false;
-  // step i produces a tile with positions = union(positions used by its left, positions used by its right).
-  // For a pool ref, positions = bitmask of that one index.
+// Walk the steps tree and return the bitmask of pool positions consumed
+// by the FINAL step's result tile. Each step's mask is the union of its
+// operand masks (pool refs contribute a single bit; step refs contribute
+// the prior step's mask).
+function finalStepsMask(steps: MathSolveStep[]): number {
+  if (steps.length === 0) return 0;
   const stepMasks: number[] = [];
   for (const s of steps) {
     const lm =
@@ -1421,8 +1463,22 @@ function coversAllPositions(steps: MathSolveStep[], poolSize: number): boolean {
         : stepMasks[s.right.index] ?? 0;
     stepMasks.push(lm | rm);
   }
-  const fullMask = (1 << poolSize) - 1;
-  return stepMasks[stepMasks.length - 1] === fullMask;
+  return stepMasks[stepMasks.length - 1] ?? 0;
+}
+
+function popcount(n: number): number {
+  let c = 0;
+  let m = n >>> 0;
+  while (m) {
+    c += m & 1;
+    m >>>= 1;
+  }
+  return c;
+}
+
+function coversAllPositions(steps: MathSolveStep[], poolSize: number): boolean {
+  if (steps.length === 0) return false;
+  return finalStepsMask(steps) === (1 << poolSize) - 1;
 }
 
 function reasonText(r: string | undefined): string {
