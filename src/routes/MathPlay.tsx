@@ -26,6 +26,7 @@ import FullscreenButton from "../components/FullscreenButton";
 import GameMenu from "../components/GameMenu";
 import Fireworks from "../components/Fireworks";
 import BuiltHive from "../components/BuiltHive";
+import EditProfile, { PencilIcon } from "../components/EditProfile";
 import type {
   MathClientMessage,
   MathDifficulty,
@@ -373,6 +374,9 @@ function Lobby({
 }) {
   const cfg = state.config;
   const setCfg = (patch: Partial<RoundConfig>) => send({ type: "configure", config: patch });
+  // Drives the EditProfile modal — matches the WordHive pattern.
+  const [editing, setEditing] = useState(false);
+  const me = state.players.find((p) => p.id === clientId);
   return (
     <main style={{ padding: "60px 20px 24px" }}>
       <h1 style={{ margin: 0, color: ACCENT }}>MathHive</h1>
@@ -389,6 +393,7 @@ function Lobby({
               player={p}
               isHostBadge={state.hostPlayerId === p.id}
               isMe={p.id === clientId}
+              onEdit={p.id === clientId ? () => setEditing(true) : undefined}
               effectiveDifficulty={effDiff}
               hasOverride={!!p.mathDifficulty}
               canSetDifficulty={isHost}
@@ -439,6 +444,21 @@ function Lobby({
           Waiting for {state.players.find((p) => p.id === state.hostPlayerId)?.name ?? "host"} to start...
         </p>
       )}
+      {editing && me && (
+        <EditProfile
+          initialName={me.name}
+          initialAvatar={me.avatar}
+          onCancel={() => setEditing(false)}
+          onSave={(newName, newAvatar) => {
+            if (newName !== me.name) send({ type: "rename", name: newName });
+            if (newAvatar !== me.avatar)
+              send({ type: "setAvatar", avatar: newAvatar });
+            localStorage.setItem(NAME_KEY, newName);
+            localStorage.setItem(AVATAR_KEY, newAvatar);
+            setEditing(false);
+          }}
+        />
+      )}
     </main>
   );
 }
@@ -482,6 +502,7 @@ function PlayerRow({
   player,
   isHostBadge,
   isMe,
+  onEdit,
   effectiveDifficulty,
   hasOverride,
   canSetDifficulty,
@@ -490,6 +511,9 @@ function PlayerRow({
   player: Player;
   isHostBadge: boolean;
   isMe: boolean;
+  // When set, this row is the viewer's own — shows a small pencil
+  // button that opens the rename/avatar modal (parity with WordHive).
+  onEdit?: () => void;
   effectiveDifficulty: MathDifficulty;
   // True if this row has a per-player override (so we can show a
   // "clear override" affordance).
@@ -518,6 +542,24 @@ function PlayerRow({
           </span>
         )}
       </span>
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          aria-label="Edit name and avatar"
+          title="Edit name / avatar"
+          style={{
+            background: "var(--bg)",
+            color: "var(--fg)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "4px 8px",
+            display: "inline-flex",
+            alignItems: "center",
+          }}
+        >
+          <PencilIcon />
+        </button>
+      )}
       {canSetDifficulty ? (
         <PerPlayerDifficultyPicker
           value={effectiveDifficulty}

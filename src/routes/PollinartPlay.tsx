@@ -23,6 +23,7 @@ import { randomName } from "../lib/randomName";
 import { AVATARS, randomAvatar } from "../lib/avatars";
 import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import Avatar from "../components/Avatar";
+import EditProfile, { PencilIcon } from "../components/EditProfile";
 import Timer from "../components/Timer";
 import PausedOverlay from "../components/PausedOverlay";
 import GardenBackground from "../components/GardenBackground";
@@ -284,6 +285,9 @@ function Lobby({
   const canStart = playerCount >= 3;
   const setCfg = (patch: Partial<typeof cfg>) =>
     send({ type: "configure", config: patch });
+  // Drives the EditProfile modal — matches the WordHive pattern.
+  const [editing, setEditing] = useState(false);
+  const me = state.players.find((p) => p.id === clientId);
   return (
     <main style={{ padding: "60px 20px 24px" }}>
       <h1 style={{ margin: 0, color: ACCENT }}>Pollinart</h1>
@@ -310,6 +314,7 @@ function Lobby({
               player={p}
               isHostBadge={state.hostPlayerId === p.id}
               isMe={p.id === clientId}
+              onEdit={p.id === clientId ? () => setEditing(true) : undefined}
               canTransferHostHere={canTransfer}
               onMakeHost={() =>
                 send({ type: "transferHost", playerId: p.id })
@@ -385,6 +390,21 @@ function Lobby({
           {state.players.find((p) => p.id === state.hostPlayerId)?.name ?? "host"} to
           start...
         </p>
+      )}
+      {editing && me && (
+        <EditProfile
+          initialName={me.name}
+          initialAvatar={me.avatar}
+          onCancel={() => setEditing(false)}
+          onSave={(newName, newAvatar) => {
+            if (newName !== me.name) send({ type: "rename", name: newName });
+            if (newAvatar !== me.avatar)
+              send({ type: "setAvatar", avatar: newAvatar });
+            localStorage.setItem(NAME_KEY, newName);
+            localStorage.setItem(AVATAR_KEY, newAvatar);
+            setEditing(false);
+          }}
+        />
       )}
     </main>
   );
@@ -1324,12 +1344,16 @@ function PlayerRow({
   player,
   isHostBadge,
   isMe,
+  onEdit,
   canTransferHostHere,
   onMakeHost,
 }: {
   player: Player;
   isHostBadge: boolean;
   isMe: boolean;
+  // When set, this row is the viewer's own — shows a small pencil
+  // button that opens the rename/avatar modal (parity with WordHive).
+  onEdit?: () => void;
   // Whether the current viewer is allowed to make THIS player the
   // host. Server enforces too; this just controls visibility.
   canTransferHostHere: boolean;
@@ -1345,10 +1369,11 @@ function PlayerRow({
         alignItems: "center",
         gap: 10,
         opacity: player.connected ? 1 : 0.4,
+        flexWrap: "wrap",
       }}
     >
       <Avatar id={player.avatar} size={36} />
-      <span style={{ flex: 1 }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
         {player.name}
         {isMe && (
           <span style={{ color: "var(--muted)", marginLeft: 6, fontSize: 13 }}>
@@ -1371,6 +1396,24 @@ function PlayerRow({
           </span>
         )}
       </span>
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          aria-label="Edit name and avatar"
+          title="Edit name / avatar"
+          style={{
+            background: "var(--bg)",
+            color: "var(--fg)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "4px 8px",
+            display: "inline-flex",
+            alignItems: "center",
+          }}
+        >
+          <PencilIcon />
+        </button>
+      )}
       {canTransferHostHere && (
         <button
           onClick={onMakeHost}
