@@ -15,6 +15,7 @@ import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import LilyFlower from "../components/LilyFlower";
+import ThemeToggle from "../components/ThemeToggle";
 import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import type {
   LobbyClientMessage,
@@ -130,6 +131,7 @@ export default function LobbyPlay() {
       <>
         <GardenBackground />
         <FullscreenButton />
+        <ThemeToggle />
         <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center", color: "var(--muted)" }}>
           Connecting...
         </main>
@@ -142,6 +144,7 @@ export default function LobbyPlay() {
       <>
         <GardenBackground />
         <FullscreenButton />
+        <ThemeToggle />
         <NameEntry
           roomCode={roomCode}
           name={name}
@@ -164,6 +167,7 @@ export default function LobbyPlay() {
     <>
       <GardenBackground />
       <FullscreenButton />
+      <ThemeToggle />
       <style>{`
         @keyframes lily-sway-a {
           0%, 100% { transform: rotate(-2.5deg); }

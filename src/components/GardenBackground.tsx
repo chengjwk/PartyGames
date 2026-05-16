@@ -107,16 +107,12 @@ export default function GardenBackground() {
         {FLOWERS.map((f, i) => (
           <Flower key={i} x={f.x} y={f.y} color={f.color} scale={f.scale} />
         ))}
-
-        {/* Very gentle darkening so the dark UI cards stay readable
-            against the bright sky. Much lighter than the dusk version. */}
-        <rect
-          width="1600"
-          height="1000"
-          fill="black"
-          opacity="0.08"
-        />
       </svg>
+      {/* Theme-aware vignette layer. Opacity is driven by --bg-vignette
+          (CSS var that changes with the data-theme attribute): heavy
+          on dark theme so light text stays readable on the bright sky,
+          near zero on light theme. */}
+      <div className="bg-vignette" />
     </div>
   );
 }

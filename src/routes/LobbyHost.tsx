@@ -13,6 +13,7 @@ import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import LilyFlower from "../components/LilyFlower";
+import ThemeToggle from "../components/ThemeToggle";
 import type {
   LobbyServerMessage,
   LobbyState,
@@ -77,6 +78,7 @@ export default function LobbyHost() {
     <>
       <GardenBackground />
       <FullscreenButton />
+      <ThemeToggle />
       <SoundUnlockPrompt />
       <style>{`
         @keyframes lily-sway-a {

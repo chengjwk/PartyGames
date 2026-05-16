@@ -1,4 +1,7 @@
 import { useNavigate } from "react-router-dom";
+import GardenBackground from "../components/GardenBackground";
+import FullscreenButton from "../components/FullscreenButton";
+import ThemeToggle from "../components/ThemeToggle";
 
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ"; // skip I and O for legibility
 
@@ -14,30 +17,35 @@ export default function Home() {
   const nav = useNavigate();
   const start = () => nav(`/host/${generateRoomCode()}`);
   return (
-    <main
-      style={{
-        maxWidth: 600,
-        margin: "0 auto",
-        padding: "48px 24px",
-        textAlign: "center",
-      }}
-    >
-      <h1 style={{ fontSize: 56, margin: 0 }}>Party Games</h1>
-      <p style={{ color: "var(--muted)", fontSize: 18, marginTop: 8 }}>
-        Word and math party games. Phones join via QR code; the host player picks
-        the game.
-      </p>
-      <button
-        onClick={start}
-        style={{ fontSize: 22, padding: "16px 32px", marginTop: 32 }}
+    <>
+      <GardenBackground />
+      <FullscreenButton />
+      <ThemeToggle />
+      <main
+        style={{
+          maxWidth: 600,
+          margin: "0 auto",
+          padding: "48px 24px",
+          textAlign: "center",
+        }}
       >
-        Host a new game
-      </button>
-      <div style={{ display: "flex", gap: 24, justifyContent: "center", marginTop: 32 }}>
-        <GameSummary emoji="🐝" name="WordHive" accent="#f5b400" />
-        <GameSummary emoji="🧮" name="MathHive" accent="#6aa6ff" />
-      </div>
-    </main>
+        <h1 style={{ fontSize: 56, margin: 0 }}>Party Games</h1>
+        <p style={{ color: "var(--muted)", fontSize: 18, marginTop: 8 }}>
+          Word and math party games. Phones join via QR code; the host player picks
+          the game.
+        </p>
+        <button
+          onClick={start}
+          style={{ fontSize: 22, padding: "16px 32px", marginTop: 32 }}
+        >
+          Host a new game
+        </button>
+        <div style={{ display: "flex", gap: 24, justifyContent: "center", marginTop: 32 }}>
+          <GameSummary emoji="🐝" name="WordHive" accent="#f5b400" />
+          <GameSummary emoji="🧮" name="MathHive" accent="#6aa6ff" />
+        </div>
+      </main>
+    </>
   );
 }
 
