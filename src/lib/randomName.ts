@@ -1,8 +1,36 @@
+// Mix of "nice" adjectives (Brave, Cheery) with funnier/weirder ones
+// (Lumpy, Questionable, Squelchy) so a roll-of-the-dice random name
+// has a good chance of landing somewhere absurd.
 const ADJECTIVES = [
+  // classics
   "Brave", "Clever", "Witty", "Sneaky", "Mighty", "Sleepy", "Happy", "Speedy",
   "Sparkly", "Grumpy", "Cheery", "Cozy", "Fancy", "Goofy", "Jazzy", "Lucky",
   "Plucky", "Quirky", "Snazzy", "Spunky", "Zippy", "Wobbly", "Bouncy", "Twirly",
   "Lanky", "Fluffy", "Bubbly", "Dapper", "Jolly", "Nifty",
+  // squishy / texture / shape — kid-funny
+  "Squishy", "Squelchy", "Lumpy", "Bumpy", "Crusty", "Crispy", "Gloopy",
+  "Mushy", "Soggy", "Slimy", "Sticky", "Pokey", "Squiggly", "Wiggly",
+  "Jiggly", "Floppy", "Squashy", "Doughy", "Knobbly", "Spongy", "Stringy",
+  "Globby", "Blobby", "Puddingy",
+  // attitude / suspicion (the "questionable" / "dubious" energy)
+  "Questionable", "Dubious", "Suspicious", "Shifty", "Shady", "Sketchy",
+  "Mysterious", "Confused", "Bewildered", "Befuddled", "Cranky", "Sulky",
+  "Smug", "Hangry", "Grouchy", "Snooty", "Sassy", "Salty", "Cheeky",
+  "Petty", "Nosy", "Indignant", "Disgruntled", "Reluctant", "Apologetic",
+  // slightly upscale-but-wrong words
+  "Disheveled", "Unhinged", "Rambunctious", "Flummoxed", "Overcaffeinated",
+  "Underprepared", "Mildly Concerned", "Lightly Toasted", "Slightly Damp",
+  "Vaguely Familiar", "Aggressively Polite", "Suspiciously Calm",
+  "Cautiously Optimistic", "Begrudgingly Helpful",
+  // sound / motion
+  "Clattery", "Honky", "Squeaky", "Creaky", "Wheezy", "Snorty", "Chompy",
+  "Slurpy", "Burpy", "Hiccupy", "Sniffly", "Yawny", "Snoozy", "Drowsy",
+  // size / state
+  "Tiny", "Hefty", "Chonky", "Smol", "Beefy", "Sturdy", "Crumpled",
+  "Tangled", "Tousled", "Frazzled", "Bedraggled", "Bewhiskered",
+  // food-ish flavors
+  "Buttery", "Cheesy", "Gravy-Flecked", "Marinated", "Pickled", "Toasted",
+  "Frosted", "Glazed", "Caramelized", "Smoked",
 ];
 
 const ANIMALS = [
