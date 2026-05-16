@@ -127,6 +127,19 @@ Full per-round chain history kept in `roundArchive` for the reveal.
   total — might feel slow. If so, drop stagger to ~150ms and/or
   duration to ~1100ms.
 
+## Lobby garden — future flower additions
+
+- **Cherry blossom on a tree.** The bold-cartoon cherry blossom
+  component already exists at `src/components/styles/
+  CherryBlossomBold.tsx`. To deploy it in the picker we'd want a
+  small cherry tree drawn into `GardenBackground` (branch + a
+  cluster of blossoms), since lone cherry blossoms on stems look
+  weird. Worth doing for a fourth-game slot or as a seasonal swap.
+- **Lotus on a pond.** Same situation — a lotus needs a pond /
+  lily pad to land on, which would mean adding a small water
+  patch + ripples to `GardenBackground`. Lovely visual but needs
+  the environment work first.
+
 ## Housekeeping
 
 - **Refactor `FullscreenButton` + `ThemeToggle` into a top-right

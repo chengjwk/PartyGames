@@ -12,9 +12,9 @@ import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
-import LilyFlower from "../components/LilyFlower";
-import DaisyFlower from "../components/DaisyFlower";
-import PetalFlower from "../components/PetalFlower";
+import SunflowerBold from "../components/styles/SunflowerBold";
+import TulipBold from "../components/styles/TulipBold";
+import PoppyBold from "../components/styles/PoppyBold";
 import ThemeToggle from "../components/ThemeToggle";
 import type {
   LobbyGame,
@@ -235,41 +235,25 @@ function DisplayFlower({
       {meta.emoji}
     </text>
   );
+  const flowerCommon = {
+    petalColor: meta.petalColor,
+    petalEdge: meta.petalHighlight,
+    stemLength: meta.stemLength,
+    scale: 1.6,
+    swayKeyframes,
+    centerContent,
+  };
   let flower: React.ReactNode;
-  if (meta.flower === "lily") {
-    flower = (
-      <LilyFlower
-        petalColor={meta.petalColor}
-        petalHighlight={meta.petalHighlight}
-        stemLength={meta.stemLength}
-        scale={1.6}
-        swayKeyframes={swayKeyframes}
-        centerContent={centerContent}
-      />
-    );
-  } else if (meta.flower === "daisy") {
-    flower = (
-      <DaisyFlower
-        petalColor={meta.petalColor}
-        petalEdge={meta.petalHighlight}
-        stemLength={meta.stemLength}
-        scale={1.6}
-        swayKeyframes={swayKeyframes}
-        centerContent={centerContent}
-      />
-    );
-  } else {
-    // petal — WordHive's original 5-round-petal flower at TV scale.
-    flower = (
-      <PetalFlower
-        petalColor={meta.petalColor}
-        petalEdge={meta.petalHighlight}
-        stemLength={meta.stemLength}
-        scale={1.6}
-        swayKeyframes={swayKeyframes}
-        centerContent={centerContent}
-      />
-    );
+  switch (meta.flower) {
+    case "sunflower":
+      flower = <SunflowerBold {...flowerCommon} />;
+      break;
+    case "tulip":
+      flower = <TulipBold {...flowerCommon} />;
+      break;
+    case "poppy":
+      flower = <PoppyBold {...flowerCommon} />;
+      break;
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
@@ -284,7 +268,7 @@ function DisplayFlower({
 function displayMeta(game: LobbyGame): {
   label: string;
   emoji: string;
-  flower: "lily" | "daisy" | "petal";
+  flower: "sunflower" | "tulip" | "poppy";
   petalColor: string;
   petalHighlight: string;
   stemLength: number;
@@ -293,28 +277,28 @@ function displayMeta(game: LobbyGame): {
     return {
       label: "WordHive",
       emoji: "🐝",
-      flower: "petal",
-      petalColor: "#f5a300",
-      petalHighlight: "#3a2a14",
-      stemLength: 220,
+      flower: "sunflower",
+      petalColor: "#f5b400",
+      petalHighlight: "#1a1006",
+      stemLength: 190,
     };
   }
   if (game === "math") {
     return {
       label: "MathHive",
       emoji: "🧮",
-      flower: "lily",
+      flower: "tulip",
       petalColor: "#3a76db",
-      petalHighlight: "#88b0f0",
-      stemLength: 175,
+      petalHighlight: "#1a1006",
+      stemLength: 245,
     };
   }
   return {
     label: "Pollinart",
     emoji: "🎨",
-    flower: "daisy",
-    petalColor: "#fafaf2",
-    petalHighlight: "#7a6244",
-    stemLength: 240,
+    flower: "poppy",
+    petalColor: "#d12646",
+    petalHighlight: "#1a1006",
+    stemLength: 175,
   };
 }

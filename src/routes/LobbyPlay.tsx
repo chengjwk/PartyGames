@@ -14,9 +14,9 @@ import { AVATARS, randomAvatar } from "../lib/avatars";
 import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
-import LilyFlower from "../components/LilyFlower";
-import DaisyFlower from "../components/DaisyFlower";
-import PetalFlower from "../components/PetalFlower";
+import SunflowerBold from "../components/styles/SunflowerBold";
+import TulipBold from "../components/styles/TulipBold";
+import PoppyBold from "../components/styles/PoppyBold";
 import ThemeToggle from "../components/ThemeToggle";
 import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import type {
@@ -333,44 +333,23 @@ function FlowerButton({
             {meta.emoji}
           </text>
         );
-        if (meta.flower === "lily") {
-          return (
-            <LilyFlower
-              petalColor={meta.petalColor}
-              petalHighlight={meta.petalHighlight}
-              stemLength={meta.stemLength}
-              scale={0.8}
-              swayKeyframes={swayKeyframes}
-              bloomIn
-              centerContent={centerContent}
-            />
-          );
+        const common = {
+          petalColor: meta.petalColor,
+          petalEdge: meta.petalHighlight,
+          stemLength: meta.stemLength,
+          scale: 0.8,
+          swayKeyframes,
+          bloomIn: true,
+          centerContent,
+        };
+        switch (meta.flower) {
+          case "sunflower":
+            return <SunflowerBold {...common} />;
+          case "tulip":
+            return <TulipBold {...common} />;
+          case "poppy":
+            return <PoppyBold {...common} />;
         }
-        if (meta.flower === "daisy") {
-          return (
-            <DaisyFlower
-              petalColor={meta.petalColor}
-              petalEdge={meta.petalHighlight}
-              stemLength={meta.stemLength}
-              scale={0.8}
-              swayKeyframes={swayKeyframes}
-              bloomIn
-              centerContent={centerContent}
-            />
-          );
-        }
-        // petal — WordHive's original 5-round-petal flower.
-        return (
-          <PetalFlower
-            petalColor={meta.petalColor}
-            petalEdge={meta.petalHighlight}
-            stemLength={meta.stemLength}
-            scale={0.8}
-            swayKeyframes={swayKeyframes}
-            bloomIn
-            centerContent={centerContent}
-          />
-        );
       })()}
       <div style={{ fontSize: 18, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
         {meta.label}
@@ -402,10 +381,12 @@ export function pickerMeta(game: LobbyGame): {
   label: string;
   tagline: string;
   emoji: string;
-  flower: "lily" | "daisy" | "petal";
+  flower: "sunflower" | "tulip" | "poppy";
   petalColor: string;
-  // For lily this is the inner highlight; for daisy/petal it's the
-  // outline / edge tint. Same prop name to keep the call sites uniform.
+  // Dark outline / edge tint passed to every bold-cartoon flower
+  // as `petalEdge`. Kept the prop name "petalHighlight" for
+  // backwards compat with the older flower components in
+  // /flower-styles.
   petalHighlight: string;
   stemLength: number;
 } {
@@ -414,11 +395,12 @@ export function pickerMeta(game: LobbyGame): {
       label: "WordHive",
       tagline: "Spell with the bees",
       emoji: "🐝",
-      flower: "petal",
-      // Punchier honey-gold (was pastel #f7c84a).
-      petalColor: "#f5a300",
-      petalHighlight: "#3a2a14",
-      stemLength: 118,
+      flower: "sunflower",
+      // Sunflower gold — a touch yellower than the previous honey
+      // so it reads unmistakably as a sunflower.
+      petalColor: "#f5b400",
+      petalHighlight: "#1a1006",
+      stemLength: 100,
     };
   }
   if (game === "math") {
@@ -426,23 +408,23 @@ export function pickerMeta(game: LobbyGame): {
       label: "MathHive",
       tagline: "Solve the number",
       emoji: "🧮",
-      flower: "lily",
-      // Punchier royal blue (was pastel #7fb3ff).
+      flower: "tulip",
+      // Royal blue tulip. Tulips don't come in blue in real life,
+      // but the stylized blue tulip is a familiar visual idiom.
       petalColor: "#3a76db",
-      petalHighlight: "#88b0f0",
-      stemLength: 96,
+      petalHighlight: "#1a1006",
+      stemLength: 130,
     };
   }
-  // draw → Pollinart
+  // draw → Pollinart — red poppy
   return {
     label: "Pollinart",
     tagline: "Draw, guess, repeat",
     emoji: "🎨",
-    flower: "daisy",
-    // Brighter white center but a richer edge (was washed-out cream).
-    petalColor: "#fafaf2",
-    petalHighlight: "#7a6244",
-    stemLength: 130,
+    flower: "poppy",
+    petalColor: "#d12646",
+    petalHighlight: "#1a1006",
+    stemLength: 96,
   };
 }
 
