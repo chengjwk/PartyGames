@@ -12,6 +12,7 @@ import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
+import LilyFlower from "../components/LilyFlower";
 import type {
   LobbyServerMessage,
   LobbyState,
@@ -78,11 +79,11 @@ export default function LobbyHost() {
       <FullscreenButton />
       <SoundUnlockPrompt />
       <style>{`
-        @keyframes flower-sway-a {
+        @keyframes lily-sway-a {
           0%, 100% { transform: rotate(-2.5deg); }
           50%      { transform: rotate(2.5deg); }
         }
-        @keyframes flower-sway-b {
+        @keyframes lily-sway-b {
           0%, 100% { transform: rotate(2deg); }
           50%      { transform: rotate(-2deg); }
         }
@@ -191,8 +192,8 @@ export default function LobbyHost() {
               alignItems: "end",
             }}
           >
-            <DisplayFlower kind="word" swayKeyframes="flower-sway-a" />
-            <DisplayFlower kind="math" swayKeyframes="flower-sway-b" />
+            <DisplayFlower kind="word" swayKeyframes="lily-sway-a" />
+            <DisplayFlower kind="math" swayKeyframes="lily-sway-b" />
           </div>
         </section>
       </main>
@@ -200,9 +201,10 @@ export default function LobbyHost() {
   );
 }
 
-// TV-side decorative flower. Mirrors the phone picker's flower so the
-// host's TV shows what's available. Not interactive — the host picks
-// from their phone.
+// TV-side decorative lily. Mirrors the phone picker's flower at TV scale
+// so the host's display shows the same garden patch as their phone. Not
+// interactive — picking happens on the phone. WordHive blooms taller
+// than MathHive to match the phone version's height contrast.
 function DisplayFlower({
   kind,
   swayKeyframes,
@@ -211,91 +213,33 @@ function DisplayFlower({
   swayKeyframes: string;
 }) {
   const isWord = kind === "word";
-  const petalColor = isWord ? "#f7d56e" : "#9ec3ff";
-  const petalHighlight = isWord ? "#fbe89a" : "#c5d9ff";
+  const petalColor = isWord ? "#f7c84a" : "#7fb3ff";
+  const petalHighlight = isWord ? "#ffe28a" : "#b9d3ff";
   const emoji = isWord ? "🐝" : "🧮";
   const label = isWord ? "WordHive" : "MathHive";
-  // Bigger than the phone flower — TV-scale.
-  const PETAL_R = 46;
-  const RING_R = 50;
-  const CENTER_R = 40;
-  const STEM_LEN = 180;
-  const W = 2 * (RING_R + PETAL_R) + 16;
-  const H = STEM_LEN + RING_R + PETAL_R + 12;
+  const stemLength = isWord ? 240 : 175;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <svg
-        width={W}
-        height={H}
-        viewBox={`${-W / 2} ${-H} ${W} ${H}`}
-        aria-hidden
-        style={{
-          transformBox: "fill-box",
-          transformOrigin: "50% 100%",
-          animation: `${swayKeyframes} 4.5s ease-in-out infinite`,
-          overflow: "visible",
-        }}
-      >
-        <line
-          x1={0}
-          y1={0}
-          x2={0}
-          y2={-STEM_LEN}
-          stroke="#244022"
-          strokeWidth={8}
-          strokeLinecap="round"
-        />
-        <ellipse
-          cx={24}
-          cy={-STEM_LEN * 0.45}
-          rx={30}
-          ry={15}
-          fill="#345e30"
-          stroke="#1c3a1c"
-          strokeWidth={2}
-          transform={`rotate(35 24 ${-STEM_LEN * 0.45})`}
-        />
-        {[0, 1, 2, 3, 4].map((i) => {
-          const a = ((Math.PI * 2) / 5) * i - Math.PI / 2;
-          return (
-            <g key={i}>
-              <circle
-                cx={RING_R * Math.cos(a)}
-                cy={-STEM_LEN + RING_R * Math.sin(a)}
-                r={PETAL_R}
-                fill={petalColor}
-                stroke="#3a2a14"
-                strokeWidth={2.5}
-              />
-              <circle
-                cx={RING_R * Math.cos(a) - PETAL_R * 0.3}
-                cy={-STEM_LEN + RING_R * Math.sin(a) - PETAL_R * 0.3}
-                r={PETAL_R * 0.35}
-                fill={petalHighlight}
-                opacity={0.6}
-              />
-            </g>
-          );
-        })}
-        <circle
-          cx={0}
-          cy={-STEM_LEN}
-          r={CENTER_R}
-          fill="#f4cd44"
-          stroke="#3a2a14"
-          strokeWidth={3}
-        />
-        <text
-          x={0}
-          y={-STEM_LEN + 4}
-          fontSize={CENTER_R * 1.3}
-          textAnchor="middle"
-          dominantBaseline="central"
-          style={{ userSelect: "none" }}
-        >
-          {emoji}
-        </text>
-      </svg>
+      <LilyFlower
+        petalColor={petalColor}
+        petalHighlight={petalHighlight}
+        stemLength={stemLength}
+        scale={1.7}
+        swayKeyframes={swayKeyframes}
+        centerContent={
+          <text
+            x={0}
+            y={0}
+            fontSize={42}
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{ userSelect: "none" }}
+          >
+            {emoji}
+          </text>
+        }
+      />
       <div style={{ fontSize: 32, fontWeight: 700, color: "var(--fg)", marginTop: 8 }}>
         {label}
       </div>

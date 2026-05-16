@@ -203,8 +203,12 @@ export function generateMathPuzzle(difficulty: MathDifficulty): MathPuzzle {
 // until the score decays to the floor; players still finish past the
 // budget, they just don't earn more for going faster.
 //
-// Tuning: feels right at the speed-vs-care trade-off. Quicker than these
-// and the all-six bonus becomes irrelevant; slower and chains feel sluggish.
+// Base points grow super-linearly with digits used (1 op = 2 digits,
+// 5 ops = 6 digits). The deltas are 6/8/10/12 so each additional digit
+// brings a bigger per-digit reward than the last — strongly incentivizes
+// chaining through more of the pool. The all-six bonus piles +15 more
+// on top, so a fully-chained 5-op solve maxes at 55 pts vs. 4 pts for
+// the easiest single-op solve.
 export const TARGET_TIME_BUDGET_MS: Record<number, number> = {
   1: 5_000,
   2: 8_000,
@@ -213,14 +217,14 @@ export const TARGET_TIME_BUDGET_MS: Record<number, number> = {
   5: 22_000,
 };
 export const TARGET_BASE_POINTS: Record<number, number> = {
-  1: 5,
-  2: 8,
-  3: 11,
-  4: 14,
-  5: 17,
+  1: 4,
+  2: 10,
+  3: 18,
+  4: 28,
+  5: 40,
 };
 export const TARGET_FLOOR_POINTS = 1;
-export const ALL_SIX_BONUS = 5;
+export const ALL_SIX_BONUS = 15;
 export const SKIP_PENALTY = -1;
 
 // Build a sampled "slot" of valid target values for a pool. We want a mix

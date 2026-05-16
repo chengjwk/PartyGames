@@ -1,5 +1,7 @@
-// Stylized garden scene rendered behind the host display. Muted palette so the
-// dark UI cards above stay readable. SVG only, no images.
+// Stylized garden scene rendered behind the host display. Bright daytime
+// palette — blue sky, fluffy clouds, sun high in the sky, vibrant green
+// hills, scattered wildflowers along a grass line. SVG only, no images.
+// A faint dark overlay keeps the dark UI cards above readable.
 
 const FLOWERS: Array<{ x: number; y: number; color: string; scale: number }> = [
   { x: 80, y: 870, color: "#f8b8d0", scale: 1 },
@@ -22,6 +24,13 @@ const GRASS_BLADES: Array<{ x: number; y: number; h: number }> = Array.from(
   }),
 );
 
+const CLOUDS: Array<{ x: number; y: number; scale: number }> = [
+  { x: 220, y: 180, scale: 1.0 },
+  { x: 620, y: 130, scale: 0.85 },
+  { x: 1080, y: 220, scale: 1.15 },
+  { x: 1450, y: 160, scale: 0.7 },
+];
+
 export default function GardenBackground() {
   return (
     <div
@@ -41,40 +50,47 @@ export default function GardenBackground() {
         viewBox="0 0 1600 1000"
       >
         <defs>
+          {/* Daytime sky — clear blue at zenith fading toward a pale
+              greenish horizon where it meets the hills. */}
           <linearGradient id="garden-sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#1f2730" />
-            <stop offset="55%" stopColor="#2c3a45" />
-            <stop offset="78%" stopColor="#5a5a3e" />
-            <stop offset="100%" stopColor="#3d4f2c" />
+            <stop offset="0%" stopColor="#4ea6e2" />
+            <stop offset="45%" stopColor="#8fc7e8" />
+            <stop offset="72%" stopColor="#cfe6e2" />
+            <stop offset="100%" stopColor="#aac88a" />
           </linearGradient>
           <radialGradient id="garden-sun" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#ffe6a8" stopOpacity="0.85" />
-            <stop offset="60%" stopColor="#f4b063" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#f4b063" stopOpacity="0" />
+            <stop offset="0%" stopColor="#fff8d4" stopOpacity="1" />
+            <stop offset="55%" stopColor="#ffe48a" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#ffe48a" stopOpacity="0" />
           </radialGradient>
         </defs>
 
         <rect width="1600" height="1000" fill="url(#garden-sky)" />
 
-        {/* Sun glow on the horizon */}
-        <circle cx="1280" cy="640" r="240" fill="url(#garden-sun)" />
-        <circle cx="1280" cy="640" r="60" fill="#ffd17a" opacity="0.7" />
+        {/* Sun high in the sky */}
+        <circle cx="1280" cy="200" r="260" fill="url(#garden-sun)" />
+        <circle cx="1280" cy="200" r="62" fill="#fff4b0" opacity="0.95" />
+
+        {/* Fluffy daytime clouds */}
+        {CLOUDS.map((c, i) => (
+          <Cloud key={i} x={c.x} y={c.y} scale={c.scale} />
+        ))}
 
         {/* Distant rolling hills */}
         <path
           d="M0,720 Q300,650 620,700 T1200,690 T1600,680 L1600,1000 L0,1000 Z"
-          fill="#2f4a32"
-          opacity="0.85"
+          fill="#6a9c5e"
+          opacity="0.9"
         />
         {/* Mid hills */}
         <path
           d="M0,820 Q400,760 820,800 T1600,790 L1600,1000 L0,1000 Z"
-          fill="#274428"
+          fill="#4f8344"
         />
         {/* Front grass */}
         <path
           d="M0,920 Q200,895 460,920 T1000,910 T1600,920 L1600,1000 L0,1000 Z"
-          fill="#1b3a1b"
+          fill="#3a6a32"
         />
 
         {/* Grass blades silhouetted */}
@@ -82,8 +98,8 @@ export default function GardenBackground() {
           <path
             key={i}
             d={`M${g.x},${g.y} q-2,-${g.h * 0.4} 0,-${g.h} q3,${g.h * 0.4} 0,${g.h} z`}
-            fill="#2a4a2a"
-            opacity="0.7"
+            fill="#4a7c40"
+            opacity="0.85"
           />
         ))}
 
@@ -92,15 +108,28 @@ export default function GardenBackground() {
           <Flower key={i} x={f.x} y={f.y} color={f.color} scale={f.scale} />
         ))}
 
-        {/* Soft vignette so the UI cards stay readable */}
+        {/* Very gentle darkening so the dark UI cards stay readable
+            against the bright sky. Much lighter than the dusk version. */}
         <rect
           width="1600"
           height="1000"
           fill="black"
-          opacity="0.18"
+          opacity="0.08"
         />
       </svg>
     </div>
+  );
+}
+
+function Cloud({ x, y, scale }: { x: number; y: number; scale: number }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${scale})`} opacity={0.9}>
+      <ellipse cx={0} cy={0} rx={62} ry={20} fill="#ffffff" />
+      <ellipse cx={-32} cy={-10} rx={28} ry={18} fill="#ffffff" />
+      <ellipse cx={28} cy={-12} rx={32} ry={20} fill="#ffffff" />
+      <ellipse cx={4} cy={-22} rx={24} ry={15} fill="#ffffff" />
+      <ellipse cx={50} cy={-4} rx={22} ry={14} fill="#ffffff" />
+    </g>
   );
 }
 

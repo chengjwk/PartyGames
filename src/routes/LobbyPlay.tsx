@@ -14,6 +14,7 @@ import { AVATARS, randomAvatar } from "../lib/avatars";
 import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
+import LilyFlower from "../components/LilyFlower";
 import type {
   LobbyClientMessage,
   LobbyGame,
@@ -143,15 +144,15 @@ export default function LobbyPlay() {
       <GardenBackground />
       <FullscreenButton />
       <style>{`
-        @keyframes flower-sway-a {
+        @keyframes lily-sway-a {
           0%, 100% { transform: rotate(-2.5deg); }
           50%      { transform: rotate(2.5deg); }
         }
-        @keyframes flower-sway-b {
+        @keyframes lily-sway-b {
           0%, 100% { transform: rotate(2deg); }
           50%      { transform: rotate(-2deg); }
         }
-        @keyframes flower-bloom {
+        @keyframes lily-bloom {
           0%   { transform: scale(0.85); }
           50%  { transform: scale(1.05); }
           100% { transform: scale(1); }
@@ -229,13 +230,13 @@ export default function LobbyPlay() {
           >
             <FlowerButton
               game="word"
-              swayKeyframes="flower-sway-a"
+              swayKeyframes="lily-sway-a"
               disabled={!isHost}
               onPick={() => send({ type: "pickGame", game: "word" })}
             />
             <FlowerButton
               game="math"
-              swayKeyframes="flower-sway-b"
+              swayKeyframes="lily-sway-b"
               disabled={!isHost}
               onPick={() => send({ type: "pickGame", game: "math" })}
             />
@@ -246,11 +247,9 @@ export default function LobbyPlay() {
   );
 }
 
-// Flower-shaped game button. Petals + leaf + stem + center disc with the
-// game emoji. Color of the petals identifies the game; geometry matches
-// the GardenBackground's flower style so the picker reads as part of
-// the same garden scene. Gently sways. Disabled state (non-host) keeps
-// the flower visible but desaturated and unclickable.
+// Game-picker flower — lily-shaped tappable button. WordHive blooms a
+// little taller than MathHive so they don't look like clones; both grow
+// up from the same ground line (alignItems: "end" on the grid).
 function FlowerButton({
   game,
   onPick,
@@ -263,21 +262,15 @@ function FlowerButton({
   disabled: boolean;
 }) {
   const isWord = game === "word";
-  // Petal colors — yellow for the bee game (matches WordHive --accent),
-  // soft blue for math (matches the MathHive accent).
-  const petalColor = isWord ? "#f7d56e" : "#9ec3ff";
-  const petalHighlight = isWord ? "#fbe89a" : "#c5d9ff";
+  // Petal colors — honey-yellow for the bee game, soft blue for math.
+  const petalColor = isWord ? "#f7c84a" : "#7fb3ff";
+  const petalHighlight = isWord ? "#ffe28a" : "#b9d3ff";
   const emoji = isWord ? "🐝" : "🧮";
   const label = isWord ? "WordHive" : "MathHive";
   const tagline = isWord ? "Spell with the bees" : "Solve the number";
-
-  // Geometry
-  const PETAL_R = 28;
-  const RING_R = 30;
-  const CENTER_R = 24;
-  const STEM_LEN = 96;
-  const W = 2 * (RING_R + PETAL_R) + 12;
-  const H = STEM_LEN + RING_R + PETAL_R + 8;
+  // Different stem heights so the two flowers feel like distinct plants
+  // rather than mirror images. WordHive (older) blooms a bit taller.
+  const stemLength = isWord ? 130 : 96;
 
   return (
     <button
@@ -297,85 +290,26 @@ function FlowerButton({
         transition: "opacity 0.2s",
       }}
     >
-      <svg
-        width={W}
-        height={H}
-        viewBox={`${-W / 2} ${-H} ${W} ${H}`}
-        aria-hidden
-        style={{
-          // Sway origin at the bottom of the stem so the flower head
-          // rocks gently like a real flower in a breeze.
-          transformBox: "fill-box",
-          transformOrigin: "50% 100%",
-          animation: `${swayKeyframes} 4.5s ease-in-out infinite, flower-bloom 0.5s ease-out`,
-          overflow: "visible",
-        }}
-      >
-        {/* Stem */}
-        <line
-          x1={0}
-          y1={0}
-          x2={0}
-          y2={-STEM_LEN}
-          stroke="#244022"
-          strokeWidth={5}
-          strokeLinecap="round"
-        />
-        {/* Leaf */}
-        <ellipse
-          cx={14}
-          cy={-STEM_LEN * 0.45}
-          rx={18}
-          ry={9}
-          fill="#345e30"
-          stroke="#1c3a1c"
-          strokeWidth={1.5}
-          transform={`rotate(35 14 ${-STEM_LEN * 0.45})`}
-        />
-        {/* Petals */}
-        {[0, 1, 2, 3, 4].map((i) => {
-          const a = ((Math.PI * 2) / 5) * i - Math.PI / 2;
-          return (
-            <g key={i}>
-              <circle
-                cx={RING_R * Math.cos(a)}
-                cy={-STEM_LEN + RING_R * Math.sin(a)}
-                r={PETAL_R}
-                fill={petalColor}
-                stroke="#3a2a14"
-                strokeWidth={1.5}
-              />
-              {/* Subtle highlight on each petal for depth */}
-              <circle
-                cx={RING_R * Math.cos(a) - PETAL_R * 0.3}
-                cy={-STEM_LEN + RING_R * Math.sin(a) - PETAL_R * 0.3}
-                r={PETAL_R * 0.35}
-                fill={petalHighlight}
-                opacity={0.55}
-              />
-            </g>
-          );
-        })}
-        {/* Center disc with game emoji */}
-        <circle
-          cx={0}
-          cy={-STEM_LEN}
-          r={CENTER_R}
-          fill="#f4cd44"
-          stroke="#3a2a14"
-          strokeWidth={2}
-        />
-        <text
-          x={0}
-          y={-STEM_LEN + 2}
-          fontSize={CENTER_R * 1.3}
-          textAnchor="middle"
-          dominantBaseline="central"
-          style={{ userSelect: "none" }}
-        >
-          {emoji}
-        </text>
-      </svg>
+      <LilyFlower
+        petalColor={petalColor}
+        petalHighlight={petalHighlight}
+        stemLength={stemLength}
+        scale={0.9}
+        swayKeyframes={swayKeyframes}
+        bloomIn
+        centerContent={
+          <text
+            x={0}
+            y={0}
+            fontSize={20}
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{ userSelect: "none" }}
+          >
+            {emoji}
+          </text>
+        }
+      />
       <div style={{ fontSize: 20, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
         {label}
       </div>
