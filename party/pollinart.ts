@@ -489,6 +489,11 @@ export default class PollinartServer implements Party.Server {
 
   // ───── reveal ─────
   private beginReveal() {
+    // Score the round up-front so `roundSummary` is populated as soon
+    // as the REVEAL phase starts. Without this the clients see
+    // `state.roundSummary === null` for the entire reveal and just
+    // render "Preparing reveal…" forever.
+    this.applyScoring();
     this.phase = "REVEAL";
     this.revealChainIndex = 0;
     this.revealStepIndex = -1; // start with only the seed word visible
@@ -520,8 +525,8 @@ export default class PollinartServer implements Party.Server {
   }
 
   private endReveal() {
-    // Compute scoring on the full chain data.
-    this.applyScoring();
+    // Scoring already ran at beginReveal — just flip phase + clear
+    // the reveal cursor.
     this.revealChainIndex = null;
     this.revealStepIndex = null;
     this.phase = "ROUND_RESULTS";
