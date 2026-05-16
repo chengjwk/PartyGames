@@ -415,7 +415,8 @@ export function pickerMeta(game: LobbyGame): {
       tagline: "Spell with the bees",
       emoji: "🐝",
       flower: "petal",
-      petalColor: "#f7c84a",
+      // Punchier honey-gold (was pastel #f7c84a).
+      petalColor: "#f5a300",
       petalHighlight: "#3a2a14",
       stemLength: 118,
     };
@@ -426,8 +427,9 @@ export function pickerMeta(game: LobbyGame): {
       tagline: "Solve the number",
       emoji: "🧮",
       flower: "lily",
-      petalColor: "#7fb3ff",
-      petalHighlight: "#b9d3ff",
+      // Punchier royal blue (was pastel #7fb3ff).
+      petalColor: "#3a76db",
+      petalHighlight: "#88b0f0",
       stemLength: 96,
     };
   }
@@ -437,8 +439,9 @@ export function pickerMeta(game: LobbyGame): {
     tagline: "Draw, guess, repeat",
     emoji: "🎨",
     flower: "daisy",
-    petalColor: "#f8f4ec",
-    petalHighlight: "#c8b8a4",
+    // Brighter white center but a richer edge (was washed-out cream).
+    petalColor: "#fafaf2",
+    petalHighlight: "#7a6244",
     stemLength: 130,
   };
 }

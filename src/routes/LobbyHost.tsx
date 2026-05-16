@@ -294,7 +294,7 @@ function displayMeta(game: LobbyGame): {
       label: "WordHive",
       emoji: "🐝",
       flower: "petal",
-      petalColor: "#f7c84a",
+      petalColor: "#f5a300",
       petalHighlight: "#3a2a14",
       stemLength: 220,
     };
@@ -304,8 +304,8 @@ function displayMeta(game: LobbyGame): {
       label: "MathHive",
       emoji: "🧮",
       flower: "lily",
-      petalColor: "#7fb3ff",
-      petalHighlight: "#b9d3ff",
+      petalColor: "#3a76db",
+      petalHighlight: "#88b0f0",
       stemLength: 175,
     };
   }
@@ -313,8 +313,8 @@ function displayMeta(game: LobbyGame): {
     label: "Pollinart",
     emoji: "🎨",
     flower: "daisy",
-    petalColor: "#f8f4ec",
-    petalHighlight: "#c8b8a4",
+    petalColor: "#fafaf2",
+    petalHighlight: "#7a6244",
     stemLength: 240,
   };
 }

@@ -9,16 +9,18 @@
 
 import { useTheme } from "../lib/theme";
 
+// Less-pastel daytime palette. Saturated, garden-bright colors so
+// the foreground flowers don't dissolve into the new punchier sky.
 const DAY_FLOWERS: Array<{ x: number; y: number; color: string; scale: number }> = [
-  { x: 80, y: 870, color: "#f8b8d0", scale: 1 },
-  { x: 220, y: 920, color: "#f7d56e", scale: 1.1 },
-  { x: 410, y: 880, color: "#dca0e6", scale: 0.9 },
-  { x: 560, y: 930, color: "#f8b8d0", scale: 1.2 },
-  { x: 760, y: 890, color: "#f7d56e", scale: 0.95 },
-  { x: 940, y: 920, color: "#ffae8a", scale: 1.05 },
-  { x: 1140, y: 880, color: "#dca0e6", scale: 1 },
-  { x: 1320, y: 925, color: "#f7d56e", scale: 1.15 },
-  { x: 1480, y: 895, color: "#f8b8d0", scale: 0.95 },
+  { x: 80, y: 870, color: "#e84a91", scale: 1 },       // rose-pink
+  { x: 220, y: 920, color: "#f5b400", scale: 1.1 },    // gold
+  { x: 410, y: 880, color: "#a23eb8", scale: 0.9 },    // royal purple
+  { x: 560, y: 930, color: "#e84a91", scale: 1.2 },    // rose-pink
+  { x: 760, y: 890, color: "#f5b400", scale: 0.95 },   // gold
+  { x: 940, y: 920, color: "#ff6a36", scale: 1.05 },   // coral
+  { x: 1140, y: 880, color: "#a23eb8", scale: 1 },     // royal purple
+  { x: 1320, y: 925, color: "#f5b400", scale: 1.15 },  // gold
+  { x: 1480, y: 895, color: "#d92646", scale: 0.95 },  // poppy red
 ];
 
 // At night flowers read as muted silhouettes washed in moonlight.
@@ -87,17 +89,23 @@ export default function GardenBackground() {
           <linearGradient id="garden-sky" x1="0" y1="0" x2="0" y2="1">
             {isNight ? (
               <>
-                <stop offset="0%" stopColor="#08101e" />
-                <stop offset="45%" stopColor="#152040" />
-                <stop offset="78%" stopColor="#243250" />
-                <stop offset="100%" stopColor="#1e3a28" />
+                {/* Punchier night sky — deeper indigo at top, richer
+                    purple-blue in the middle, more saturated green
+                    haze near the horizon. */}
+                <stop offset="0%" stopColor="#040716" />
+                <stop offset="45%" stopColor="#0b1740" />
+                <stop offset="78%" stopColor="#1c2a55" />
+                <stop offset="100%" stopColor="#0e2e1c" />
               </>
             ) : (
               <>
-                <stop offset="0%" stopColor="#4ea6e2" />
-                <stop offset="45%" stopColor="#8fc7e8" />
-                <stop offset="72%" stopColor="#cfe6e2" />
-                <stop offset="100%" stopColor="#aac88a" />
+                {/* Less-pastel daytime — saturated cerulean up top,
+                    crisp aqua-cyan band, and an actual fresh-grass
+                    green at the horizon line. */}
+                <stop offset="0%" stopColor="#1d7fd1" />
+                <stop offset="45%" stopColor="#48a8df" />
+                <stop offset="72%" stopColor="#9ed1c8" />
+                <stop offset="100%" stopColor="#76b04a" />
               </>
             )}
           </linearGradient>
@@ -149,21 +157,22 @@ export default function GardenBackground() {
         {/* Clouds — daytime only */}
         {!isNight && CLOUDS.map((c, i) => <Cloud key={i} x={c.x} y={c.y} scale={c.scale} />)}
 
-        {/* Distant rolling hills */}
+        {/* Distant rolling hills — deeper, more saturated greens
+            than the previous pastel palette. */}
         <path
           d="M0,720 Q300,650 620,700 T1200,690 T1600,680 L1600,1000 L0,1000 Z"
-          fill={isNight ? "#1a3025" : "#6a9c5e"}
-          opacity={isNight ? 1 : 0.9}
+          fill={isNight ? "#0e261c" : "#3f8a3a"}
+          opacity={isNight ? 1 : 1}
         />
         {/* Mid hills */}
         <path
           d="M0,820 Q400,760 820,800 T1600,790 L1600,1000 L0,1000 Z"
-          fill={isNight ? "#0f2018" : "#4f8344"}
+          fill={isNight ? "#061410" : "#2f6a2c"}
         />
         {/* Front grass */}
         <path
           d="M0,920 Q200,895 460,920 T1000,910 T1600,920 L1600,1000 L0,1000 Z"
-          fill={isNight ? "#0a160e" : "#3a6a32"}
+          fill={isNight ? "#030a05" : "#214f1c"}
         />
 
         {/* Grass blades silhouetted */}
