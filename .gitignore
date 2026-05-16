@@ -6,3 +6,5 @@ dist
 .partykit
 *.log
 .vscode
+# TS incremental build cache — regenerated on every `tsc -b`.
+tsconfig.tsbuildinfo
