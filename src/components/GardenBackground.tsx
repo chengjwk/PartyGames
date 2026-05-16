@@ -1,9 +1,15 @@
-// Stylized garden scene rendered behind the host display. Bright daytime
-// palette — blue sky, fluffy clouds, sun high in the sky, vibrant green
-// hills, scattered wildflowers along a grass line. SVG only, no images.
-// A faint dark overlay keeps the dark UI cards above readable.
+// Stylized garden scene that adapts to the active theme:
+//   - Light theme → daytime: blue sky, sun, fluffy clouds, bright hills.
+//   - Dark theme  → nighttime: deep navy sky, moon with subtle craters,
+//                   scattered stars, muted hills, dimmed flowers.
+//
+// The BG is the primary atmospheric layer; theme drives its palette
+// directly, so the UI text contrast just works (dark text on bright sky;
+// light text on dark sky).
 
-const FLOWERS: Array<{ x: number; y: number; color: string; scale: number }> = [
+import { useTheme } from "../lib/theme";
+
+const DAY_FLOWERS: Array<{ x: number; y: number; color: string; scale: number }> = [
   { x: 80, y: 870, color: "#f8b8d0", scale: 1 },
   { x: 220, y: 920, color: "#f7d56e", scale: 1.1 },
   { x: 410, y: 880, color: "#dca0e6", scale: 0.9 },
@@ -14,6 +20,9 @@ const FLOWERS: Array<{ x: number; y: number; color: string; scale: number }> = [
   { x: 1320, y: 925, color: "#f7d56e", scale: 1.15 },
   { x: 1480, y: 895, color: "#f8b8d0", scale: 0.95 },
 ];
+
+// At night flowers read as muted silhouettes washed in moonlight.
+const NIGHT_FLOWERS = DAY_FLOWERS.map((f) => ({ ...f, color: nightTint(f.color) }));
 
 const GRASS_BLADES: Array<{ x: number; y: number; h: number }> = Array.from(
   { length: 30 },
@@ -31,7 +40,32 @@ const CLOUDS: Array<{ x: number; y: number; scale: number }> = [
   { x: 1450, y: 160, scale: 0.7 },
 ];
 
+// Deterministic pseudo-random scatter of stars in the upper 60% of the
+// sky. IIFE so the array is built once at module load — re-renders keep
+// the same star positions.
+const STARS: Array<{ x: number; y: number; r: number; o: number }> = (() => {
+  const out: { x: number; y: number; r: number; o: number }[] = [];
+  let s = 12345;
+  const rand = () => {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
+  for (let i = 0; i < 55; i++) {
+    out.push({
+      x: rand() * 1580 + 10,
+      y: rand() * 560 + 20,
+      r: 0.9 + rand() * 1.3,
+      o: 0.35 + rand() * 0.55,
+    });
+  }
+  return out;
+})();
+
 export default function GardenBackground() {
+  const [theme] = useTheme();
+  const isNight = theme === "dark";
+  const flowers = isNight ? NIGHT_FLOWERS : DAY_FLOWERS;
+
   return (
     <div
       aria-hidden
@@ -50,47 +84,86 @@ export default function GardenBackground() {
         viewBox="0 0 1600 1000"
       >
         <defs>
-          {/* Daytime sky — clear blue at zenith fading toward a pale
-              greenish horizon where it meets the hills. */}
           <linearGradient id="garden-sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#4ea6e2" />
-            <stop offset="45%" stopColor="#8fc7e8" />
-            <stop offset="72%" stopColor="#cfe6e2" />
-            <stop offset="100%" stopColor="#aac88a" />
+            {isNight ? (
+              <>
+                <stop offset="0%" stopColor="#08101e" />
+                <stop offset="45%" stopColor="#152040" />
+                <stop offset="78%" stopColor="#243250" />
+                <stop offset="100%" stopColor="#1e3a28" />
+              </>
+            ) : (
+              <>
+                <stop offset="0%" stopColor="#4ea6e2" />
+                <stop offset="45%" stopColor="#8fc7e8" />
+                <stop offset="72%" stopColor="#cfe6e2" />
+                <stop offset="100%" stopColor="#aac88a" />
+              </>
+            )}
           </linearGradient>
-          <radialGradient id="garden-sun" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor="#fff8d4" stopOpacity="1" />
-            <stop offset="55%" stopColor="#ffe48a" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#ffe48a" stopOpacity="0" />
+          <radialGradient id="garden-luminary" cx="50%" cy="50%" r="50%">
+            {isNight ? (
+              <>
+                <stop offset="0%" stopColor="#f4f1e0" stopOpacity="0.85" />
+                <stop offset="55%" stopColor="#a8b8e8" stopOpacity="0.25" />
+                <stop offset="100%" stopColor="#a8b8e8" stopOpacity="0" />
+              </>
+            ) : (
+              <>
+                <stop offset="0%" stopColor="#fff8d4" stopOpacity="1" />
+                <stop offset="55%" stopColor="#ffe48a" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#ffe48a" stopOpacity="0" />
+              </>
+            )}
           </radialGradient>
         </defs>
 
         <rect width="1600" height="1000" fill="url(#garden-sky)" />
 
-        {/* Sun high in the sky */}
-        <circle cx="1280" cy="200" r="260" fill="url(#garden-sun)" />
-        <circle cx="1280" cy="200" r="62" fill="#fff4b0" opacity="0.95" />
+        {/* Stars — night only */}
+        {isNight &&
+          STARS.map((s, i) => (
+            <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="#f4f1e0" opacity={s.o} />
+          ))}
 
-        {/* Fluffy daytime clouds */}
-        {CLOUDS.map((c, i) => (
-          <Cloud key={i} x={c.x} y={c.y} scale={c.scale} />
-        ))}
+        {/* Soft glow halo around sun/moon */}
+        <circle cx="1280" cy="200" r="260" fill="url(#garden-luminary)" />
+        {/* Sun / Moon body */}
+        <circle
+          cx="1280"
+          cy="200"
+          r={isNight ? 56 : 62}
+          fill={isNight ? "#f4f1e0" : "#fff4b0"}
+          opacity={isNight ? 0.95 : 0.95}
+        />
+        {/* Moon craters — only at night */}
+        {isNight && (
+          <>
+            <circle cx="1262" cy="194" r="7" fill="#a8a89a" opacity="0.4" />
+            <circle cx="1297" cy="207" r="4.5" fill="#a8a89a" opacity="0.4" />
+            <circle cx="1276" cy="221" r="5.5" fill="#a8a89a" opacity="0.4" />
+            <circle cx="1305" cy="184" r="3" fill="#a8a89a" opacity="0.35" />
+          </>
+        )}
+
+        {/* Clouds — daytime only */}
+        {!isNight && CLOUDS.map((c, i) => <Cloud key={i} x={c.x} y={c.y} scale={c.scale} />)}
 
         {/* Distant rolling hills */}
         <path
           d="M0,720 Q300,650 620,700 T1200,690 T1600,680 L1600,1000 L0,1000 Z"
-          fill="#6a9c5e"
-          opacity="0.9"
+          fill={isNight ? "#1a3025" : "#6a9c5e"}
+          opacity={isNight ? 1 : 0.9}
         />
         {/* Mid hills */}
         <path
           d="M0,820 Q400,760 820,800 T1600,790 L1600,1000 L0,1000 Z"
-          fill="#4f8344"
+          fill={isNight ? "#0f2018" : "#4f8344"}
         />
         {/* Front grass */}
         <path
           d="M0,920 Q200,895 460,920 T1000,910 T1600,920 L1600,1000 L0,1000 Z"
-          fill="#3a6a32"
+          fill={isNight ? "#0a160e" : "#3a6a32"}
         />
 
         {/* Grass blades silhouetted */}
@@ -98,21 +171,16 @@ export default function GardenBackground() {
           <path
             key={i}
             d={`M${g.x},${g.y} q-2,-${g.h * 0.4} 0,-${g.h} q3,${g.h * 0.4} 0,${g.h} z`}
-            fill="#4a7c40"
-            opacity="0.85"
+            fill={isNight ? "#1a2818" : "#4a7c40"}
+            opacity={isNight ? 0.7 : 0.85}
           />
         ))}
 
         {/* Flowers in front */}
-        {FLOWERS.map((f, i) => (
+        {flowers.map((f, i) => (
           <Flower key={i} x={f.x} y={f.y} color={f.color} scale={f.scale} />
         ))}
       </svg>
-      {/* Theme-aware vignette layer. Opacity is driven by --bg-vignette
-          (CSS var that changes with the data-theme attribute): heavy
-          on dark theme so light text stays readable on the bright sky,
-          near zero on light theme. */}
-      <div className="bg-vignette" />
     </div>
   );
 }
@@ -146,7 +214,7 @@ function Flower({
       <line x1={0} y1={0} x2={0} y2={-46} stroke="#244022" strokeWidth={3} />
       <ellipse cx={5} cy={-30} rx={6} ry={3} fill="#345e30" transform="rotate(35 5 -30)" />
       {[0, 1, 2, 3, 4].map((i) => {
-        const a = (Math.PI * 2 / 5) * i - Math.PI / 2;
+        const a = ((Math.PI * 2) / 5) * i - Math.PI / 2;
         return (
           <circle
             key={i}
@@ -161,4 +229,15 @@ function Flower({
       <circle cx={0} cy={-56} r={6} fill="#f4cd44" />
     </g>
   );
+}
+
+// Darken + slightly cool a daytime flower color for the nighttime palette.
+function nightTint(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const nr = Math.round(r * 0.32);
+  const ng = Math.round(g * 0.32);
+  const nb = Math.min(255, Math.round(b * 0.32 + 24));
+  return `#${nr.toString(16).padStart(2, "0")}${ng.toString(16).padStart(2, "0")}${nb.toString(16).padStart(2, "0")}`;
 }
