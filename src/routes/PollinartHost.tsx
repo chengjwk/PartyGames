@@ -18,7 +18,9 @@ import FullscreenButton from "../components/FullscreenButton";
 import ThemeToggle from "../components/ThemeToggle";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import PausedOverlay from "../components/PausedOverlay";
+import GameMenu from "../components/GameMenu";
 import DrawingReplay from "../components/DrawingReplay";
+import type { PublicGameState } from "../shared/types";
 import type {
   ChainRevealed,
   PollinartPublicGameState,
@@ -107,12 +109,25 @@ export default function PollinartHost() {
   }
 
   const disconnected = state.players.filter((p) => !p.connected);
+  // Lightweight send wrapper so GameMenu can dispatch pause / stop /
+  // switch-games from the TV. The host TV is implicitly trusted
+  // (isHost), matching the WordHive and MathHive host displays.
+  const sendFromTV = (msg: unknown) =>
+    socketRef.current?.send(JSON.stringify(msg));
+  // GameMenu expects the old-shape PublicGameState. The Pollinart
+  // state shape has a wider phase union; we cast through unknown.
+  const stateForMenu = state as unknown as PublicGameState;
   return (
     <>
       <GardenBackground />
       <FullscreenButton />
       <ThemeToggle />
       <SoundUnlockPrompt />
+      <GameMenu
+        state={stateForMenu}
+        send={sendFromTV as never}
+        isHost
+      />
       {view}
       {/* When a player disconnects mid-round, the room auto-pauses.
           The TV PausedOverlay shows the QR code + room code so the
@@ -123,12 +138,7 @@ export default function PollinartHost() {
           disconnected={disconnected}
           showQR
           game="draw"
-          onResume={() => {
-            // Host TV doesn't normally send messages, but the resume
-            // tap is harmless — server ignores it if the room isn't
-            // actually paused.
-            socketRef.current?.send(JSON.stringify({ type: "togglePause" }));
-          }}
+          onResume={() => sendFromTV({ type: "togglePause" })}
         />
       )}
     </>
