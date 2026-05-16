@@ -14,9 +14,9 @@ import { AVATARS, randomAvatar } from "../lib/avatars";
 import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
-import SunflowerBold from "../components/styles/SunflowerBold";
-import TulipBold from "../components/styles/TulipBold";
-import PoppyBold from "../components/styles/PoppyBold";
+import SunflowerPainterly from "../components/styles/SunflowerPainterly";
+import TulipPainterly from "../components/styles/TulipPainterly";
+import PoppyPainterly from "../components/styles/PoppyPainterly";
 import ThemeToggle from "../components/ThemeToggle";
 import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import type {
@@ -344,11 +344,11 @@ function FlowerButton({
         };
         switch (meta.flower) {
           case "sunflower":
-            return <SunflowerBold {...common} />;
+            return <SunflowerPainterly {...common} />;
           case "tulip":
-            return <TulipBold {...common} />;
+            return <TulipPainterly {...common} />;
           case "poppy":
-            return <PoppyBold {...common} />;
+            return <PoppyPainterly {...common} />;
         }
       })()}
       <div style={{ fontSize: 18, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
@@ -399,8 +399,12 @@ export function pickerMeta(game: LobbyGame): {
       // Sunflower gold — a touch yellower than the previous honey
       // so it reads unmistakably as a sunflower.
       petalColor: "#f5b400",
-      petalHighlight: "#1a1006",
-      stemLength: 100,
+      // Outline color for the painterly stroke. Warm brown reads
+      // softer than pure black at low opacity.
+      petalHighlight: "#3a2410",
+      // Sunflower is the tallest of the three so the picker garden
+      // has a clear hero plant.
+      stemLength: 150,
     };
   }
   if (game === "math") {
@@ -409,11 +413,9 @@ export function pickerMeta(game: LobbyGame): {
       tagline: "Solve the number",
       emoji: "🧮",
       flower: "tulip",
-      // Royal blue tulip. Tulips don't come in blue in real life,
-      // but the stylized blue tulip is a familiar visual idiom.
       petalColor: "#3a76db",
-      petalHighlight: "#1a1006",
-      stemLength: 130,
+      petalHighlight: "#0e1a3a",
+      stemLength: 118,
     };
   }
   // draw → Pollinart — red poppy
@@ -423,8 +425,8 @@ export function pickerMeta(game: LobbyGame): {
     emoji: "🎨",
     flower: "poppy",
     petalColor: "#d12646",
-    petalHighlight: "#1a1006",
-    stemLength: 96,
+    petalHighlight: "#3a0a14",
+    stemLength: 94,
   };
 }
 

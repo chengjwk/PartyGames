@@ -12,9 +12,9 @@ import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
-import SunflowerBold from "../components/styles/SunflowerBold";
-import TulipBold from "../components/styles/TulipBold";
-import PoppyBold from "../components/styles/PoppyBold";
+import SunflowerPainterly from "../components/styles/SunflowerPainterly";
+import TulipPainterly from "../components/styles/TulipPainterly";
+import PoppyPainterly from "../components/styles/PoppyPainterly";
 import ThemeToggle from "../components/ThemeToggle";
 import type {
   LobbyGame,
@@ -246,13 +246,13 @@ function DisplayFlower({
   let flower: React.ReactNode;
   switch (meta.flower) {
     case "sunflower":
-      flower = <SunflowerBold {...flowerCommon} />;
+      flower = <SunflowerPainterly {...flowerCommon} />;
       break;
     case "tulip":
-      flower = <TulipBold {...flowerCommon} />;
+      flower = <TulipPainterly {...flowerCommon} />;
       break;
     case "poppy":
-      flower = <PoppyBold {...flowerCommon} />;
+      flower = <PoppyPainterly {...flowerCommon} />;
       break;
   }
   return (
@@ -279,8 +279,9 @@ function displayMeta(game: LobbyGame): {
       emoji: "🐝",
       flower: "sunflower",
       petalColor: "#f5b400",
-      petalHighlight: "#1a1006",
-      stemLength: 190,
+      petalHighlight: "#3a2410",
+      // Sunflower is the hero plant — clearly the tallest on TV.
+      stemLength: 280,
     };
   }
   if (game === "math") {
@@ -289,8 +290,8 @@ function displayMeta(game: LobbyGame): {
       emoji: "🧮",
       flower: "tulip",
       petalColor: "#3a76db",
-      petalHighlight: "#1a1006",
-      stemLength: 245,
+      petalHighlight: "#0e1a3a",
+      stemLength: 220,
     };
   }
   return {
@@ -298,7 +299,7 @@ function displayMeta(game: LobbyGame): {
     emoji: "🎨",
     flower: "poppy",
     petalColor: "#d12646",
-    petalHighlight: "#1a1006",
+    petalHighlight: "#3a0a14",
     stemLength: 175,
   };
 }
