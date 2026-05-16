@@ -45,10 +45,16 @@ const PAUSE_GRACE_MS = 3000;
 const MIN_PLAYERS = 3;
 
 const EXACT_MATCH_POINTS = 3;
+// Bonus to everyone in the chain when the final guess matches the
+// seed word — "you all kept the chain alive."
 const END_BONUS_POINTS = 5;
-// Levenshtein cap for "near-exact" — covers most typos without bridging
-// to genuinely different words (robin/bird still doesn't pass).
-const LEV_TOLERANCE = 2;
+// Extra bonus on top of END_BONUS_POINTS to the chain's originator —
+// rewards the player whose seed word held up through the telephone.
+const ORIGINATOR_BONUS_POINTS = 7;
+// Levenshtein cap for "near-exact" — covers most typos and spelling
+// drift. Combined with whitespace-stripped normalization this also
+// papers over "hot dog" vs "hotdog" and similar spacing variants.
+const LEV_TOLERANCE = 3;
 
 interface PollinartConfig {
   totalRounds: number;
@@ -140,6 +146,11 @@ export default class PollinartServer implements Party.Server {
 
   // Reactions (round-scoped). Map of `${chainId}|${stepIndex}` -> reactions array.
   private reactions = new Map<string, DrawingReaction[]>();
+  // What `applyScoring` last added to `totalScores`, per player. We
+  // subtract this before re-applying so that re-running the scorer
+  // (e.g., after a drawer vote during reveal) doesn't double-count.
+  // Cleared at the start of each round in `resetRoundState`.
+  private lastAppliedContribution = new Map<string, number>();
 
   private nextChainSerial = 1;
 
@@ -162,7 +173,8 @@ export default class PollinartServer implements Party.Server {
     if (!stillHere) {
       const p = this.players.get(cid);
       if (p) p.connected = false;
-      if (this.hostPlayerId === cid) this.hostPlayerId = this.electHost();
+      // Host is sticky — see other servers. transferHost is the
+      // explicit handoff path.
       this.maybeSchedulePause();
     }
     this.broadcastState();
@@ -206,6 +218,9 @@ export default class PollinartServer implements Party.Server {
       case "reactToDrawing":
         this.handleReaction(sender, msg);
         return;
+      case "ratePair":
+        this.handleRatePair(sender, msg);
+        return;
       case "advanceReveal":
         if (this.isHost(sender)) this.handleAdvanceReveal();
         return;
@@ -227,7 +242,29 @@ export default class PollinartServer implements Party.Server {
       case "switchGames":
         if (this.isHost(sender)) this.handleSwitchGames();
         return;
+      case "transferHost":
+        this.handleTransferHost(sender, msg);
+        return;
     }
+  }
+
+  // Host transfer. Current host can delegate; if the current host is
+  // offline anyone can claim. Server-gated.
+  private handleTransferHost(
+    sender: Party.Connection,
+    msg: { playerId: string },
+  ) {
+    const senderCid = this.connToClient.get(sender.id);
+    if (!senderCid) return;
+    const target = this.players.get(msg.playerId);
+    if (!target) return;
+    const currentHost = this.hostPlayerId
+      ? this.players.get(this.hostPlayerId)
+      : null;
+    const hostConnected = !!currentHost?.connected;
+    if (hostConnected && senderCid !== this.hostPlayerId) return;
+    this.hostPlayerId = msg.playerId;
+    this.broadcastState();
   }
 
   // ───── join / config ─────
@@ -254,7 +291,8 @@ export default class PollinartServer implements Party.Server {
       this.totalScores.set(msg.clientId, this.totalScores.get(msg.clientId) ?? 0);
     }
     this.connToClient.set(sender.id, msg.clientId);
-    if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)?.connected) {
+    // Sticky host. transferHost is the explicit handoff path.
+    if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)) {
       this.hostPlayerId = this.electHost();
     }
     this.maybeResume();
@@ -356,8 +394,13 @@ export default class PollinartServer implements Party.Server {
     // Establish the round's player order — shuffled connected players.
     const connected = this.connectedPlayers();
     const shuffled = shuffle(connected.map((p) => p.id));
-    // Chain length: N if even, N+1 if odd (originator wraps as final guesser).
-    this.chainLength = shuffled.length % 2 === 0 ? shuffled.length : shuffled.length + 1;
+    // Chain length: largest even number ≤ N. Ensures the chain always
+    // ends on a guess AND never wraps back to the originator (so no
+    // one ends up guessing a drawing they themselves drew). For odd
+    // player counts the last player in each chain is "off" — we
+    // rotate which one across chains so participation evens out.
+    this.chainLength =
+      shuffled.length % 2 === 0 ? shuffled.length : shuffled.length - 1;
     this.chains = shuffled.map((ownerId, k) => {
       // Chain k's player sequence rotates starting at k for chainLength entries.
       const seq: string[] = [];
@@ -540,6 +583,12 @@ export default class PollinartServer implements Party.Server {
 
   // ───── scoring ─────
   private applyScoring() {
+    // Subtract last contribution from totalScores so re-running this
+    // function (e.g., after a drawer vote) doesn't double-add.
+    for (const [pid, amt] of this.lastAppliedContribution) {
+      this.totalScores.set(pid, (this.totalScores.get(pid) ?? 0) - amt);
+    }
+    this.lastAppliedContribution.clear();
     const perPlayerTotals = new Map<string, number>();
     const summaryChains: ChainRevealed[] = [];
     for (const chain of this.chains) {
@@ -553,9 +602,11 @@ export default class PollinartServer implements Party.Server {
       };
       for (const step of chain.steps) {
         if (step.kind !== "guess") continue;
-        // Auto-classify isMatch using the current expected word.
+        // Auto-verdict via the loosened fuzzy matcher.
         step.isMatch = compareWords(step.guess, step.expectedWord);
-        if (step.isMatch) {
+        // Drawer's vote overrides the auto-verdict when present.
+        const matched = step.drawerRated ?? step.isMatch;
+        if (matched) {
           // Drawer (step.index-1) and guesser both score.
           award(step.playerId, EXACT_MATCH_POINTS);
           const prev = chain.steps.find((s) => s.index === step.index - 1);
@@ -564,7 +615,10 @@ export default class PollinartServer implements Party.Server {
           }
         }
       }
-      // End-of-chain bonus: final guess matches seed word.
+      // End-of-chain bonus: final guess matches seed word. Everyone
+      // in the chain shares a base bonus; the originator gets an
+      // extra reward on top because their seed word made it through
+      // the whole telephone.
       const lastGuess = [...chain.steps]
         .filter((s) => s.kind === "guess")
         .sort((a, b) => b.index - a.index)[0];
@@ -575,6 +629,7 @@ export default class PollinartServer implements Party.Server {
       ) {
         const inChain = new Set<string>(chain.playerSequence);
         for (const pid of inChain) award(pid, END_BONUS_POINTS);
+        if (chain.startedBy) award(chain.startedBy, ORIGINATOR_BONUS_POINTS);
       }
       summaryChains.push({
         id: chain.id,
@@ -586,11 +641,13 @@ export default class PollinartServer implements Party.Server {
         pointsByPlayer,
       });
     }
-    // Mirror into perPlayer.scoreThisRound and roll totals.
+    // Mirror into perPlayer.scoreThisRound and roll totals. Record
+    // the contribution so a subsequent re-apply can undo it.
     for (const [pid, total] of perPlayerTotals) {
       const st = this.perPlayer.get(pid);
       if (st) st.scoreThisRound = total;
       this.totalScores.set(pid, (this.totalScores.get(pid) ?? 0) + total);
+      this.lastAppliedContribution.set(pid, total);
     }
     // Reactions summary.
     const reactionsAgg: Record<string, { heart: number; bee: number }> = {};
@@ -693,6 +750,35 @@ export default class PollinartServer implements Party.Server {
     this.sendPrivate(sender);
     this.broadcastState();
     this.checkStepAdvance();
+  }
+
+  // Drawer of a (draw, guess) pair rates the guess as match / no
+  // match. Their vote overrides the auto-Levenshtein verdict for
+  // scoring. Re-runs applyScoring so totals + summary update live
+  // on the host TV / phone reveal.
+  private handleRatePair(
+    sender: Party.Connection,
+    msg: { chainId: string; guessStepIndex: number; matched: boolean },
+  ) {
+    if (this.phase !== "REVEAL" && this.phase !== "ROUND_RESULTS") return;
+    const cid = this.connToClient.get(sender.id);
+    if (!cid) return;
+    const chain = this.chains.find((c) => c.id === msg.chainId);
+    if (!chain) return;
+    const guess = chain.steps.find(
+      (s) => s.index === msg.guessStepIndex && s.kind === "guess",
+    );
+    if (!guess || guess.kind !== "guess") return;
+    // Only the drawer of the matching drawing step (index - 1) may
+    // rate. The guesser themselves and bystanders can't.
+    const draw = chain.steps.find(
+      (s) => s.index === msg.guessStepIndex - 1 && s.kind === "draw",
+    );
+    if (!draw || draw.kind !== "draw") return;
+    if (draw.playerId !== cid) return;
+    guess.drawerRated = !!msg.matched;
+    this.applyScoring();
+    this.broadcastState();
   }
 
   private handleReaction(
@@ -801,6 +887,7 @@ export default class PollinartServer implements Party.Server {
     this.chainLength = 0;
     this.currentStepSubmitted.clear();
     this.reactions.clear();
+    this.lastAppliedContribution.clear();
     this.revealChainIndex = null;
     this.revealStepIndex = null;
     this.roundSummary = null;
@@ -1061,7 +1148,7 @@ export default class PollinartServer implements Party.Server {
 
   private ensureHost() {
     const cur = this.hostPlayerId ? this.players.get(this.hostPlayerId) : null;
-    if (cur?.connected) return;
+    if (cur) return;
     this.hostPlayerId = this.electHost();
   }
 
@@ -1090,15 +1177,16 @@ function shuffle<T>(arr: T[]): T[] {
   return out;
 }
 
-// Normalize before comparison: lowercase, trim, collapse internal
-// whitespace, strip basic punctuation. Two-word phrases ("hot dog")
-// remain two-word; spaces are preserved between words.
+// Normalize before comparison: lowercase, trim, strip basic punctuation,
+// then strip ALL whitespace. Treating "hot dog" and "hotdog" as the
+// same lets the auto-matcher be more generous on spacing without
+// inflating Levenshtein costs over the space characters.
 function normalizeWord(s: string): string {
   return s
     .toLowerCase()
     .trim()
     .replace(/[.,!?;:'"()\[\]{}]/g, "")
-    .replace(/\s+/g, " ");
+    .replace(/\s+/g, "");
 }
 
 function compareWords(a: string, b: string): boolean {

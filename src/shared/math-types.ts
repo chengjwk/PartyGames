@@ -124,7 +124,8 @@ export type MathClientMessage =
   | { type: "skipWait" }
   | { type: "togglePause" }
   | { type: "resetGame" }
-  | { type: "switchGames" };
+  | { type: "switchGames" }
+  | { type: "transferHost"; playerId: string };
 
 export type MathSolveReason =
   | "wrong_target"

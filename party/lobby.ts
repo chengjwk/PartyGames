@@ -23,7 +23,8 @@ export type LobbyClientMessage =
   | { type: "rename"; name: string }
   | { type: "setAvatar"; avatar: string }
   | { type: "pickGame"; game: LobbyGame }
-  | { type: "resetChoice" };
+  | { type: "resetChoice" }
+  | { type: "transferHost"; playerId: string };
 
 export type LobbyServerMessage =
   | { type: "you"; playerId: string }
@@ -56,7 +57,10 @@ export default class LobbyServer implements Party.Server {
     if (!stillHere) {
       const p = this.players.get(cid);
       if (p) p.connected = false;
-      if (this.hostPlayerId === cid) this.hostPlayerId = this.electHost();
+      // Host is sticky — we do NOT auto-migrate when the host
+      // disconnects. The host keeps the role even when offline so
+      // they're still host on reconnect. To change host explicitly,
+      // someone uses the `transferHost` message.
     }
     this.broadcastState();
   }
@@ -92,7 +96,31 @@ export default class LobbyServer implements Party.Server {
           this.broadcastState();
         }
         return;
+      case "transferHost":
+        this.handleTransferHost(sender, msg);
+        return;
     }
+  }
+
+  // Host transfer: the current host can hand off to anyone, and if
+  // the current host is disconnected anyone can claim. Server enforces
+  // both rules — clients shouldn't be trusted to gate themselves.
+  private handleTransferHost(
+    sender: Party.Connection,
+    msg: { playerId: string },
+  ) {
+    const senderCid = this.connToClient.get(sender.id);
+    if (!senderCid) return;
+    const target = this.players.get(msg.playerId);
+    if (!target) return;
+    const currentHost = this.hostPlayerId
+      ? this.players.get(this.hostPlayerId)
+      : null;
+    const hostConnected = !!currentHost?.connected;
+    // If the current host is online, only the host can hand off.
+    if (hostConnected && senderCid !== this.hostPlayerId) return;
+    this.hostPlayerId = msg.playerId;
+    this.broadcastState();
   }
 
   private handleJoin(
@@ -120,7 +148,11 @@ export default class LobbyServer implements Party.Server {
       this.joinOrder.push(msg.clientId);
     }
     this.connToClient.set(sender.id, msg.clientId);
-    if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)?.connected) {
+    // Host is sticky — only assign a host if there's no host yet, or
+    // if the recorded host no longer has a player record (e.g.,
+    // cleared by handleResetGame in a sibling party). We never bump
+    // the host just because the current host is offline.
+    if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)) {
       this.hostPlayerId = this.electHost();
     }
     this.broadcastState();

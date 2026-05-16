@@ -72,8 +72,15 @@ export type ChainStep =
       // draw step's promptedWord). Used for pair-fidelity scoring.
       expectedWord: string;
       // True iff (normalized) guess equals normalized expectedWord, OR
-      // their Levenshtein distance is ≤ 2 after normalization.
+      // their Levenshtein distance is within tolerance. This is the
+      // server's auto-verdict; the drawer's rating (below) overrides
+      // it for scoring purposes when set.
       isMatch: boolean;
+      // The drawer of the corresponding drawing rates the guess as
+      // a match or not during the reveal walkthrough. `null` (or
+      // missing) means they haven't rated and we fall back to
+      // `isMatch`. Scoring uses `drawerRated ?? isMatch`.
+      drawerRated?: boolean | null;
       submittedAt: number;
       autoFilled?: boolean;
     };
@@ -227,13 +234,17 @@ export type PollinartClientMessage =
   | { type: "submitDrawing"; chainId: string; stepIndex: number; drawing: Drawing }
   | { type: "submitGuess"; chainId: string; stepIndex: number; guess: string }
   | { type: "reactToDrawing"; chainId: string; stepIndex: number; kind: "heart" | "bee" }
+  // Drawer's verdict on the guess made of their drawing during reveal.
+  // `guessStepIndex` is the index of the GUESS step being rated.
+  | { type: "ratePair"; chainId: string; guessStepIndex: number; matched: boolean }
   | { type: "advanceReveal" } // host: tap to uncover the next step
   | { type: "nextRound" }
   | { type: "playAgain" }
   | { type: "skipWait" } // host: end the current submission window early
   | { type: "togglePause" }
   | { type: "resetGame" }
-  | { type: "switchGames" };
+  | { type: "switchGames" }
+  | { type: "transferHost"; playerId: string };
 
 export type PollinartServerMessage =
   | { type: "you"; playerId: string }

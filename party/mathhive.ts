@@ -110,7 +110,8 @@ export default class MathHiveServer implements Party.Server {
     if (!stillHere) {
       const p = this.players.get(clientId);
       if (p) p.connected = false;
-      if (this.hostPlayerId === clientId) this.hostPlayerId = this.electHost();
+      // Host is sticky — see lobby.ts / index.ts. Use transferHost
+      // to hand off explicitly.
       this.maybeSchedulePause();
     }
     this.broadcastState();
@@ -166,7 +167,29 @@ export default class MathHiveServer implements Party.Server {
       case "switchGames":
         if (this.isHost(sender)) this.handleSwitchGames();
         return;
+      case "transferHost":
+        this.handleTransferHost(sender, msg);
+        return;
     }
+  }
+
+  // Host transfer. Current host can delegate; if the current host is
+  // offline anyone can claim. Server-gated.
+  private handleTransferHost(
+    sender: Party.Connection,
+    msg: { playerId: string },
+  ) {
+    const senderCid = this.connToClient.get(sender.id);
+    if (!senderCid) return;
+    const target = this.players.get(msg.playerId);
+    if (!target) return;
+    const currentHost = this.hostPlayerId
+      ? this.players.get(this.hostPlayerId)
+      : null;
+    const hostConnected = !!currentHost?.connected;
+    if (hostConnected && senderCid !== this.hostPlayerId) return;
+    this.hostPlayerId = msg.playerId;
+    this.broadcastState();
   }
 
   // ───────── handlers ─────────
@@ -193,7 +216,10 @@ export default class MathHiveServer implements Party.Server {
       this.totalScores.set(msg.clientId, this.totalScores.get(msg.clientId) ?? 0);
     }
     this.connToClient.set(sender.id, msg.clientId);
-    if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)?.connected) {
+    // Sticky host — only assign on first join (or if the recorded
+    // host has no player record at all). transferHost is the only
+    // way to change host once set.
+    if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)) {
       this.hostPlayerId = this.electHost();
     }
     // If joining mid-round and we don't have a target for this player yet,
@@ -660,7 +686,7 @@ export default class MathHiveServer implements Party.Server {
 
   private ensureHost() {
     const cur = this.hostPlayerId ? this.players.get(this.hostPlayerId) : null;
-    if (cur?.connected) return;
+    if (cur) return;
     this.hostPlayerId = this.electHost();
   }
 

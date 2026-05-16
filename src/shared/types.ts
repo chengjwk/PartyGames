@@ -140,7 +140,8 @@ export type ClientMessage =
   | { type: "skipWait" } // host: resume even if some players are still disconnected
   | { type: "togglePause" } // any player can pause/resume an active round
   | { type: "resetGame" } // bail back to LOBBY of this game
-  | { type: "switchGames" }; // host: kick everyone back to the pre-game picker
+  | { type: "switchGames" } // host: kick everyone back to the pre-game picker
+  | { type: "transferHost"; playerId: string }; // host (or anyone, if host is offline) hands off the host badge
 
 export type SubmitReason =
   | "too_short"

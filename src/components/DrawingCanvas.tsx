@@ -586,8 +586,13 @@ function ColorWheelModal({
             width: 240,
             height: 240,
             borderRadius: "50%",
+            // Conic-gradient + my pickFromWheel angle math must agree
+            // on which color sits where. The gradient defaults to top=0
+            // and goes clockwise. We pin colors at explicit gradient
+            // angles (0°=red, 60°=yellow, 120°=green …) so the colors
+            // align with HSL hue picked by the click handler.
             background:
-              "conic-gradient(from -90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)",
+              "conic-gradient(from 0deg, #ff0000 0deg, #ffff00 60deg, #00ff00 120deg, #00ffff 180deg, #0000ff 240deg, #ff00ff 300deg, #ff0000 360deg)",
             position: "relative",
             touchAction: "none",
             cursor: "crosshair",

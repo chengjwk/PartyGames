@@ -127,9 +127,9 @@ export default class WordHiveServer implements Party.Server {
     if (!stillHere) {
       const p = this.players.get(clientId);
       if (p) p.connected = false;
-      if (this.hostPlayerId === clientId) {
-        this.hostPlayerId = this.electHost();
-      }
+      // Host is sticky — we do NOT re-elect when the host disconnects.
+      // The host keeps the role through offline blips so they remain
+      // host on reconnect. Use the `transferHost` message to hand off.
       this.maybeSchedulePause();
     }
     this.broadcastState();
@@ -183,7 +183,30 @@ export default class WordHiveServer implements Party.Server {
       case "switchGames":
         if (this.isHost(sender)) this.handleSwitchGames();
         return;
+      case "transferHost":
+        this.handleTransferHost(sender, msg);
+        return;
     }
+  }
+
+  // Host transfer. The current host can hand off to anyone, and if
+  // the current host is disconnected anyone can claim. Server gates
+  // the rules — never trust the client to enforce them.
+  private handleTransferHost(
+    sender: Party.Connection,
+    msg: { playerId: string },
+  ) {
+    const senderCid = this.connToClient.get(sender.id);
+    if (!senderCid) return;
+    const target = this.players.get(msg.playerId);
+    if (!target) return;
+    const currentHost = this.hostPlayerId
+      ? this.players.get(this.hostPlayerId)
+      : null;
+    const hostConnected = !!currentHost?.connected;
+    if (hostConnected && senderCid !== this.hostPlayerId) return;
+    this.hostPlayerId = msg.playerId;
+    this.broadcastState();
   }
 
   // ---------- handlers ----------
@@ -215,8 +238,11 @@ export default class WordHiveServer implements Party.Server {
     }
     this.connToClient.set(sender.id, msg.clientId);
 
-    // First connected player becomes host.
-    if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)?.connected) {
+    // First player ever to join becomes host. Host is sticky — we
+    // never bump them just because they're momentarily offline.
+    // Explicit `transferHost` is the only way to change host once
+    // assigned.
+    if (!this.hostPlayerId || !this.players.get(this.hostPlayerId)) {
       this.hostPlayerId = this.electHost();
     }
 
@@ -945,13 +971,14 @@ export default class WordHiveServer implements Party.Server {
     return null;
   }
 
-  // Idempotent — guarantees hostPlayerId points at a connected player whenever
-  // one exists. Called before every broadcast so the invariant always holds.
+  // Idempotent — only assigns a host when there isn't one. Doesn't
+  // bump the host when they're offline; that's by design now so a
+  // host can briefly drop without losing the role.
   private ensureHost() {
     const current = this.hostPlayerId
       ? this.players.get(this.hostPlayerId)
       : null;
-    if (current?.connected) return;
+    if (current) return;
     this.hostPlayerId = this.electHost();
   }
 

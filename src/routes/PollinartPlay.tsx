@@ -207,7 +207,9 @@ export default function PollinartPlay() {
       );
       break;
     case "REVEAL":
-      view = <Reveal state={state} isHost={isHost} send={send} />;
+      view = (
+        <Reveal state={state} isHost={isHost} send={send} clientId={clientId} />
+      );
       break;
     case "ROUND_RESULTS":
       view = (
@@ -290,14 +292,31 @@ function Lobby({
         Players <span style={{ color: "var(--muted)" }}>({state.players.length})</span>
       </h2>
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
-        {state.players.map((p) => (
-          <PlayerRow
-            key={p.id}
-            player={p}
-            isHostBadge={state.hostPlayerId === p.id}
-            isMe={p.id === clientId}
-          />
-        ))}
+        {state.players.map((p) => {
+          // "Make host" appears next to non-host rows when the viewer
+          // is allowed to set it. Allowed when: (a) viewer IS the
+          // current host (delegating), or (b) the current host is
+          // offline so anyone can claim/transfer. Server validates.
+          const currentHostConnected = !!state.players.find(
+            (q) => q.id === state.hostPlayerId,
+          )?.connected;
+          const canTransfer =
+            state.hostPlayerId !== p.id &&
+            p.connected &&
+            (isHost || !currentHostConnected);
+          return (
+            <PlayerRow
+              key={p.id}
+              player={p}
+              isHostBadge={state.hostPlayerId === p.id}
+              isMe={p.id === clientId}
+              canTransferHostHere={canTransfer}
+              onMakeHost={() =>
+                send({ type: "transferHost", playerId: p.id })
+              }
+            />
+          );
+        })}
       </ul>
       {isHost ? (
         <>
@@ -782,10 +801,12 @@ function Reveal({
   state,
   isHost,
   send,
+  clientId,
 }: {
   state: PollinartPublicGameState;
   isHost: boolean;
   send: (m: PollinartClientMessage) => void;
+  clientId: string;
 }) {
   const summary = state.roundSummary;
   const chainIndex = state.revealChainIndex ?? 0;
@@ -823,7 +844,13 @@ function Reveal({
       <div style={{ color: "var(--muted)", fontSize: 14 }}>
         Started by {startedByPlayer?.name ?? "someone"}
       </div>
-      <ChainPlayback chain={chain} upToStep={stepIndex} state={state} />
+      <ChainPlayback
+        chain={chain}
+        upToStep={stepIndex}
+        state={state}
+        clientId={clientId}
+        send={send}
+      />
       {isHost && (
         <button
           onClick={() => send({ type: "advanceReveal" })}
@@ -850,10 +877,14 @@ function ChainPlayback({
   chain,
   upToStep,
   state,
+  clientId,
+  send,
 }: {
   chain: ChainRevealed;
   upToStep: number;
   state: PollinartPublicGameState;
+  clientId: string;
+  send: (m: PollinartClientMessage) => void;
 }) {
   // Pair the chain's steps as (drawing, guess). Each pair is one
   // round of the telephone game. With our chainLength guaranteed
@@ -877,7 +908,6 @@ function ChainPlayback({
       guess,
     });
   }
-  // Show only pairs whose guess step has been revealed.
   const revealedPairs = pairs.filter((p) => p.guess.index <= upToStep);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -887,9 +917,26 @@ function ChainPlayback({
           state.players.find((p) => p.id === chain.startedBy)?.name ?? ""
         }
       />
-      {revealedPairs.map((pair) => (
-        <ChainPairCard key={pair.drawIndex} pair={pair} compact />
-      ))}
+      {revealedPairs.map((pair) => {
+        const iAmDrawer =
+          pair.drawing.kind === "draw" && pair.drawing.playerId === clientId;
+        return (
+          <ChainPairCard
+            key={pair.drawIndex}
+            pair={pair}
+            compact
+            canVote={iAmDrawer}
+            onVote={(matched) =>
+              send({
+                type: "ratePair",
+                chainId: chain.id,
+                guessStepIndex: pair.guess.index,
+                matched,
+              })
+            }
+          />
+        );
+      })}
     </div>
   );
 }
@@ -920,11 +967,14 @@ function SeedCard({
 }
 
 // One (drawing, guess) pair card. Drawing on top, guess underneath,
-// match badge to the right of the guess. `compact` shrinks the
-// drawing for the phone column layout.
+// match badge to the right of the guess. If `canVote` is true the
+// drawer of this pair sees Yes/No buttons; tapping them updates the
+// match verdict.
 export function ChainPairCard({
   pair,
   compact,
+  canVote,
+  onVote,
 }: {
   pair: {
     drawIndex: number;
@@ -934,12 +984,16 @@ export function ChainPairCard({
     guess: ChainRevealed["steps"][number];
   };
   compact?: boolean;
+  canVote?: boolean;
+  onVote?: (matched: boolean) => void;
 }) {
   if (pair.drawing.kind !== "draw" || pair.guess.kind !== "guess") return null;
   const size = compact
     ? Math.min(window.innerWidth - 60, 320)
     : 360;
-  const matched = pair.guess.isMatch;
+  // Server scoring uses drawerRated when set, isMatch otherwise.
+  const drawerRated = pair.guess.drawerRated ?? null;
+  const matched = drawerRated ?? pair.guess.isMatch;
   return (
     <div
       style={{
@@ -979,13 +1033,61 @@ export function ChainPairCard({
             <em style={{ color: "var(--muted)" }}>(no guess)</em>
           )}
         </strong>
-        <MatchBadge matched={matched} />
+        <MatchBadge matched={matched} rated={drawerRated !== null} />
       </div>
+      {canVote && onVote && (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignSelf: "stretch",
+            justifyContent: "center",
+            paddingTop: 4,
+          }}
+        >
+          <button
+            onClick={() => onVote(true)}
+            aria-pressed={drawerRated === true}
+            style={{
+              flex: 1,
+              padding: "10px 14px",
+              fontSize: 16,
+              background: drawerRated === true ? "#7fd97f" : "var(--bg)",
+              color: drawerRated === true ? "#0a2a10" : "var(--fg)",
+              border: "1px solid var(--border)",
+              fontWeight: 700,
+            }}
+          >
+            ✓ Match
+          </button>
+          <button
+            onClick={() => onVote(false)}
+            aria-pressed={drawerRated === false}
+            style={{
+              flex: 1,
+              padding: "10px 14px",
+              fontSize: 16,
+              background: drawerRated === false ? "#ff8c8c" : "var(--bg)",
+              color: drawerRated === false ? "#2a0a0a" : "var(--fg)",
+              border: "1px solid var(--border)",
+              fontWeight: 700,
+            }}
+          >
+            ✗ No match
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-export function MatchBadge({ matched }: { matched: boolean }) {
+export function MatchBadge({
+  matched,
+  rated,
+}: {
+  matched: boolean;
+  rated?: boolean;
+}) {
   return (
     <span
       style={{
@@ -999,8 +1101,12 @@ export function MatchBadge({ matched }: { matched: boolean }) {
         color: matched ? "#2f7a32" : "#c0494c",
         whiteSpace: "nowrap",
       }}
+      title={rated ? "Verdict from the drawer" : "Auto-judged"}
     >
       {matched ? "✓ match" : "✗ no match"}
+      {rated && (
+        <span style={{ marginLeft: 4, opacity: 0.7 }}>· drawer</span>
+      )}
     </span>
   );
 }
@@ -1218,10 +1324,16 @@ function PlayerRow({
   player,
   isHostBadge,
   isMe,
+  canTransferHostHere,
+  onMakeHost,
 }: {
   player: Player;
   isHostBadge: boolean;
   isMe: boolean;
+  // Whether the current viewer is allowed to make THIS player the
+  // host. Server enforces too; this just controls visibility.
+  canTransferHostHere: boolean;
+  onMakeHost: () => void;
 }) {
   return (
     <li
@@ -1259,6 +1371,23 @@ function PlayerRow({
           </span>
         )}
       </span>
+      {canTransferHostHere && (
+        <button
+          onClick={onMakeHost}
+          aria-label={`Make ${player.name} the host`}
+          title={`Make ${player.name} the host`}
+          style={{
+            background: "var(--bg)",
+            color: "var(--fg)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "4px 8px",
+            fontSize: 12,
+          }}
+        >
+          👑 Make host
+        </button>
+      )}
     </li>
   );
 }
