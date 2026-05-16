@@ -129,8 +129,6 @@ Full per-round chain history kept in `roundArchive` for the reveal.
 
 ## Housekeeping
 
-- **`tsconfig.tsbuildinfo` should be in `.gitignore`.** It's a TS
-  incremental build cache; shows up as untracked after every build.
 - **Refactor `FullscreenButton` + `ThemeToggle` into a top-right
   toolbar.** Currently `ThemeToggle` uses `right: 156` — a magic number
   tied to the FS button's label width. A flexbox toolbar would absorb
