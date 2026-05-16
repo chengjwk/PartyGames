@@ -118,6 +118,11 @@ export type PollinartTask =
       // the previous guess in their currently-assigned chain).
       promptedWord: string;
       phaseEndsAt: number;
+      // The next player in this chain — i.e., who's going to receive
+      // your drawing and have to guess it. Null if this is the final
+      // step in the chain (shouldn't happen for draw, but keep
+      // optional for symmetry).
+      nextPlayerId: string | null;
     }
   | {
       kind: "guess";
@@ -125,6 +130,10 @@ export type PollinartTask =
       stepIndex: number;
       drawing: Drawing;       // the drawing this player must guess
       phaseEndsAt: number;
+      // The next player in this chain — i.e., who's going to receive
+      // your guess and have to draw it. Null if this is the final
+      // guess (end of chain).
+      nextPlayerId: string | null;
     }
   | {
       kind: "wait";

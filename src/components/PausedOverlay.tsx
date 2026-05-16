@@ -6,7 +6,7 @@ interface PausedOverlayProps {
   disconnected: Player[];
   showQR: boolean; // big TV view shows QR; phones don't need it
   onResume: () => void; // togglePause — anyone can call
-  game?: "word" | "math";
+  game?: "word" | "math" | "draw";
 }
 
 export default function PausedOverlay({ roomCode, disconnected, showQR, onResume, game = "word" }: PausedOverlayProps) {

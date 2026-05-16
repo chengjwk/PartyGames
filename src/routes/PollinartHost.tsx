@@ -17,6 +17,7 @@ import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import ThemeToggle from "../components/ThemeToggle";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
+import PausedOverlay from "../components/PausedOverlay";
 import DrawingReplay from "../components/DrawingReplay";
 import type {
   ChainRevealed,
@@ -105,6 +106,7 @@ export default function PollinartHost() {
       break;
   }
 
+  const disconnected = state.players.filter((p) => !p.connected);
   return (
     <>
       <GardenBackground />
@@ -112,6 +114,23 @@ export default function PollinartHost() {
       <ThemeToggle />
       <SoundUnlockPrompt />
       {view}
+      {/* When a player disconnects mid-round, the room auto-pauses.
+          The TV PausedOverlay shows the QR code + room code so the
+          booted player can scan their phone back in. */}
+      {state.paused && (
+        <PausedOverlay
+          roomCode={roomCode}
+          disconnected={disconnected}
+          showQR
+          game="draw"
+          onResume={() => {
+            // Host TV doesn't normally send messages, but the resume
+            // tap is harmless — server ignores it if the room isn't
+            // actually paused.
+            socketRef.current?.send(JSON.stringify({ type: "togglePause" }));
+          }}
+        />
+      )}
     </>
   );
 }
@@ -366,84 +385,94 @@ function BigChainPlayback({
   upToStep: number;
   state: PollinartPublicGameState;
 }) {
-  const entries: React.ReactNode[] = [];
-  entries.push(
-    <BigChainEntry
-      key="seed"
-      label="Seed word"
-      playerName={state.players.find((p) => p.id === chain.startedBy)?.name ?? ""}
-      content={
-        <div style={{ fontSize: 56, fontWeight: 700, color: ACCENT }}>
-          {chain.startingWord}
-        </div>
-      }
-    />,
-  );
-  for (let i = 0; i <= Math.min(upToStep, chain.chainLength - 1); i++) {
-    const step = chain.steps.find((s) => s.index === i);
-    if (!step) continue;
-    const player = state.players.find((p) => p.id === step.playerId);
-    if (step.kind === "draw") {
-      entries.push(
-        <BigChainEntry
-          key={i}
-          label={`Step ${i + 1} · drew`}
-          playerName={player?.name ?? ""}
-          content={<DrawingReplay drawing={step.drawing} size={260} animate />}
-        />,
-      );
-    } else {
-      entries.push(
-        <BigChainEntry
-          key={i}
-          label={`Step ${i + 1} · guessed`}
-          playerName={player?.name ?? ""}
-          content={
-            <div style={{ fontSize: 40, color: "var(--fg)" }}>
-              "{step.guess || <em style={{ color: "var(--muted)" }}>(no guess)</em>}"
-              {step.isMatch && (
-                <span
-                  style={{
-                    marginLeft: 10,
-                    fontSize: 22,
-                    padding: "2px 8px",
-                    borderRadius: 8,
-                    background: "rgba(127, 217, 127, 0.25)",
-                  }}
-                >
-                  ✓ match
-                </span>
-              )}
-            </div>
-          }
-        />,
-      );
-    }
+  // Pair up (draw, guess) steps. With even-length chains every drawing
+  // has a matching guess at the next index.
+  const pairs: Array<{
+    drawIndex: number;
+    drawerName: string;
+    drawing: ChainRevealed["steps"][number];
+    guesserName: string;
+    guess: ChainRevealed["steps"][number];
+  }> = [];
+  for (let i = 0; i + 1 < chain.chainLength; i += 2) {
+    const d = chain.steps.find((s) => s.index === i);
+    const g = chain.steps.find((s) => s.index === i + 1);
+    if (!d || !g) continue;
+    pairs.push({
+      drawIndex: i,
+      drawerName: state.players.find((p) => p.id === d.playerId)?.name ?? "",
+      drawing: d,
+      guesserName: state.players.find((p) => p.id === g.playerId)?.name ?? "",
+      guess: g,
+    });
   }
+  const revealed = pairs.filter((p) => p.guess.index <= upToStep);
   return (
     <div
       style={{
         display: "flex",
+        flexWrap: "wrap",
         gap: 16,
-        overflowX: "auto",
-        paddingBottom: 16,
         alignItems: "flex-start",
       }}
     >
-      {entries}
+      <BigSeedCard
+        startingWord={chain.startingWord}
+        starterName={state.players.find((p) => p.id === chain.startedBy)?.name ?? ""}
+      />
+      {revealed.map((pair) => (
+        <BigPairCard key={pair.drawIndex} pair={pair} />
+      ))}
     </div>
   );
 }
 
-function BigChainEntry({
-  label,
-  playerName,
-  content,
+function BigSeedCard({
+  startingWord,
+  starterName,
 }: {
-  label: string;
-  playerName: string;
-  content: React.ReactNode;
+  startingWord: string;
+  starterName: string;
 }) {
+  return (
+    <div
+      style={{
+        padding: 20,
+        background: "var(--bg-elev)",
+        borderRadius: 16,
+        border: "1px solid var(--border)",
+        minWidth: 220,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        alignSelf: "stretch",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      <div style={{ color: "var(--muted)", fontSize: 18 }}>
+        {starterName} started with
+      </div>
+      <div style={{ fontSize: 44, fontWeight: 800, color: ACCENT, textAlign: "center" }}>
+        {startingWord}
+      </div>
+    </div>
+  );
+}
+
+function BigPairCard({
+  pair,
+}: {
+  pair: {
+    drawIndex: number;
+    drawerName: string;
+    drawing: ChainRevealed["steps"][number];
+    guesserName: string;
+    guess: ChainRevealed["steps"][number];
+  };
+}) {
+  if (pair.drawing.kind !== "draw" || pair.guess.kind !== "guess") return null;
+  const matched = pair.guess.isMatch;
   return (
     <div
       style={{
@@ -451,16 +480,59 @@ function BigChainEntry({
         background: "var(--bg-elev)",
         borderRadius: 16,
         border: "1px solid var(--border)",
-        minWidth: 280,
-        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        alignItems: "center",
       }}
     >
-      <div style={{ color: "var(--muted)", fontSize: 16 }}>{label}</div>
-      <div style={{ color: "var(--fg)", fontSize: 22, marginBottom: 8 }}>
-        {playerName}
+      <div style={{ color: "var(--muted)", fontSize: 16, alignSelf: "stretch" }}>
+        {pair.drawerName} drew
       </div>
-      <div>{content}</div>
+      <DrawingReplay drawing={pair.drawing.drawing} size={260} />
+      <div
+        style={{
+          alignSelf: "stretch",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          fontSize: 22,
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ color: "var(--muted)", fontSize: 14 }}>
+          {pair.guesserName} guessed
+        </span>
+        <strong style={{ color: "var(--fg)", flex: 1 }}>
+          {pair.guess.guess ? (
+            `"${pair.guess.guess}"`
+          ) : (
+            <em style={{ color: "var(--muted)" }}>(no guess)</em>
+          )}
+        </strong>
+        <HostMatchBadge matched={matched} />
+      </div>
     </div>
+  );
+}
+
+function HostMatchBadge({ matched }: { matched: boolean }) {
+  return (
+    <span
+      style={{
+        fontSize: 16,
+        fontWeight: 700,
+        padding: "4px 12px",
+        borderRadius: 14,
+        background: matched
+          ? "rgba(127, 217, 127, 0.22)"
+          : "rgba(255, 140, 140, 0.18)",
+        color: matched ? "#2f7a32" : "#c0494c",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {matched ? "✓ match" : "✗ no match"}
+    </span>
   );
 }
 

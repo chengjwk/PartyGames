@@ -1,25 +1,27 @@
 // Pollinart drawing canvas. Phone-friendly pointer-events surface that
 // captures marks in normalized 0..1000 coordinates so the receiver can
-// replay at any display size. Tools: pen, eraser, fill bucket, 3 stroke
-// widths, 8-color palette, undo (10 marks), clear-all.
+// replay at any display size.
 //
-// Renders into a <canvas>. The mark list is the source of truth and is
-// re-rendered on every mark addition — keeps the canvas in sync with
-// the undo stack and lets us hand the list off to the server as-is.
+// Tools: pen, eraser, fill bucket, 3 widths, color wheel + 6 quick
+// colors, undo, clear-all.
 //
-// Canvas background is always white: drawings travel between phones
-// with different themes, so a consistent white surface keeps the colors
-// readable everywhere.
+// Layout priority: drawing surface should be as large as possible.
+// Toolbar wraps under the canvas; "Done drawing" CTA pinned to the
+// bottom. ResizeObserver continually measures the available width so
+// the canvas fills any space the toolbar leaves behind.
+//
+// Canvas background is always white — drawings travel between phones
+// with different themes, so a consistent white surface keeps the
+// colors readable everywhere.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DrawStroke, Drawing, StrokeMark } from "../shared/pollinart-types";
 
-// Canvas backing is always white — drawings cross theme boundaries, so
-// a stable surface makes colors render the same regardless of where
-// the drawing was authored or where it's replayed.
 export const CANVAS_BG = "#ffffff";
 
-const PALETTE: Array<{ label: string; color: string }> = [
+// Quick-access colors for tap-fast color switching. Color wheel is
+// available beside these for any custom color.
+const QUICK_COLORS: Array<{ label: string; color: string }> = [
   { label: "black", color: "#111111" },
   { label: "red", color: "#e23a3a" },
   { label: "orange", color: "#f08020" },
@@ -44,19 +46,15 @@ const AUTOSUBMIT_LEAD_MS = 600;
 type Tool = "pen" | "eraser" | "fill";
 
 interface DrawingCanvasProps {
-  // Called whenever the user wants to submit the current drawing.
   onSubmit: (drawing: Drawing) => void;
-  // True while the parent is waiting for the server to ack the submit.
   submitting?: boolean;
-  // Optional cap on canvas pixel size (defaults to ~96% of the window).
+  // Pixel cap. If unset the canvas grows to fill the available wrapper
+  // width up to viewport bounds.
   maxPx?: number;
   // The word the player is drawing — shown above the canvas.
   promptWord?: string;
-  // Bottom hint, e.g. "45s left".
-  bottomHint?: string;
-  // Epoch ms at which the server's draw-phase timer will expire. We
-  // auto-submit the current drawing slightly before that point so the
-  // server uses what the player has instead of an empty auto-fill.
+  // Free-text hint shown above the toolbar (e.g. "Passing to Alice").
+  passHint?: string;
   autoSubmitAt?: number | null;
 }
 
@@ -65,14 +63,14 @@ export default function DrawingCanvas({
   submitting,
   maxPx,
   promptWord,
-  bottomHint,
+  passHint,
   autoSubmitAt,
 }: DrawingCanvasProps) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  // The active stroke being built up (mid-drag); committed to strokes
-  // on pointerup. Only pen/eraser produce active strokes — fills are
-  // instantaneous and don't have a drag phase.
+  // Active stroke being built up (mid-drag); committed to strokes on
+  // pointerup. Only pen/eraser produce active strokes — fills are
+  // instantaneous and have no drag phase.
   const activeRef = useRef<StrokeMark | null>(null);
   const [strokes, setStrokes] = useState<DrawStroke[]>([]);
   // Mirror for the auto-submit closure so it always reads the latest.
@@ -80,38 +78,44 @@ export default function DrawingCanvas({
   useEffect(() => {
     strokesRef.current = strokes;
   }, [strokes]);
-  const [color, setColor] = useState(PALETTE[0].color);
+  const [color, setColor] = useState(QUICK_COLORS[0].color);
   const [width, setWidth] = useState(WIDTHS[1].w);
   const [tool, setTool] = useState<Tool>("pen");
   const [pxSize, setPxSize] = useState(0);
   const [confirmClear, setConfirmClear] = useState(false);
+  const [wheelOpen, setWheelOpen] = useState(false);
 
-  // Once an auto- or manual-submit has fired, latch this so a
-  // subsequent re-render or late timer firing can't double-submit.
   const submittedRef = useRef(false);
 
-  // Size the canvas to roughly fill the available width.
+  // Size the canvas to fill the wrapper width, capped at maxPx or the
+  // viewport, with a small allowance for the toolbar height.
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      const cap = maxPx ?? Math.min(window.innerWidth, window.innerHeight) - 40;
-      const side = Math.min(Math.floor(rect.width), cap);
+      // Reserve space for the toolbar + buttons below the canvas.
+      // Approximate: 4 rows of 36px on a phone = ~150-200px.
+      const reservedBelow = 220;
+      const cap =
+        maxPx ?? Math.min(window.innerWidth - 16, window.innerHeight - reservedBelow);
+      const side = Math.max(160, Math.min(Math.floor(rect.width), cap));
       setPxSize(side);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     window.addEventListener("orientationchange", measure);
+    window.addEventListener("resize", measure);
     return () => {
       ro.disconnect();
       window.removeEventListener("orientationchange", measure);
+      window.removeEventListener("resize", measure);
     };
   }, [maxPx]);
 
-  // Re-render the canvas whenever strokes change. We repaint everything
-  // from scratch so undo/redo/fill all stay consistent.
+  // Repaint whenever strokes change. Repaint-from-scratch keeps undo /
+  // fill / order all consistent.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || pxSize <= 0) return;
@@ -131,9 +135,7 @@ export default function DrawingCanvas({
       drawMarkOnCtx(ctx, activeRef.current, scale, CANVAS_BG, pxSize, dpr);
   }, [strokes, pxSize]);
 
-  // Auto-submit just before the server's phase timer expires so the
-  // player's in-progress canvas reaches the server instead of an
-  // empty auto-fill.
+  // Auto-submit right before the server's deadline.
   useEffect(() => {
     if (autoSubmitAt == null) return;
     if (submittedRef.current) return;
@@ -142,8 +144,6 @@ export default function DrawingCanvas({
     const id = setTimeout(() => {
       if (submittedRef.current) return;
       submittedRef.current = true;
-      // Make sure any active stroke (mid-drag at the buzzer) gets
-      // committed into the payload before we send.
       const final =
         activeRef.current && activeRef.current.points.length > 0
           ? [...strokesRef.current, activeRef.current]
@@ -174,7 +174,6 @@ export default function DrawingCanvas({
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const pt = eventToPoint(e);
     if (tool === "fill") {
-      // Instantaneous — drop a FillMark and re-render. No drag phase.
       setStrokes((s) => [...s, { kind: "fill", color, x: pt.x, y: pt.y }]);
       return;
     }
@@ -185,7 +184,6 @@ export default function DrawingCanvas({
       erase: tool === "eraser",
       points: [pt],
     };
-    // Force a redraw so the first dot renders even on a tap with no drag.
     setStrokes((s) => [...s]);
   };
 
@@ -229,15 +227,11 @@ export default function DrawingCanvas({
     setStrokes((s) => [...s, finished]);
   };
 
-  const undo = () => {
-    setStrokes((s) => s.slice(0, -1));
-  };
-
+  const undo = () => setStrokes((s) => s.slice(0, -1));
   const clearAll = () => {
     setStrokes([]);
     setConfirmClear(false);
   };
-
   const submit = () => {
     if (submitting || submittedRef.current) return;
     submittedRef.current = true;
@@ -253,20 +247,30 @@ export default function DrawingCanvas({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 8,
+        gap: 6,
         width: "100%",
       }}
     >
-      {promptWord && (
+      {(promptWord || passHint) && (
         <div
           style={{
-            fontSize: 16,
-            color: "var(--muted)",
-            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 2,
           }}
         >
-          Draw:{" "}
-          <strong style={{ color: "var(--fg)", fontSize: 22 }}>{promptWord}</strong>
+          {promptWord && (
+            <div style={{ fontSize: 16, color: "var(--muted)", textAlign: "center" }}>
+              Draw:{" "}
+              <strong style={{ color: "var(--fg)", fontSize: 22 }}>
+                {promptWord}
+              </strong>
+            </div>
+          )}
+          {passHint && (
+            <div style={{ fontSize: 13, color: "var(--muted)" }}>{passHint}</div>
+          )}
         </div>
       )}
       <div
@@ -297,34 +301,62 @@ export default function DrawingCanvas({
         )}
       </div>
 
-      {/* Toolbar */}
+      {/* Toolbar — two compact rows so colors/tools/widths and
+          actions don't get cramped on phones. */}
       <div
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: 8,
+          gap: 6,
           justifyContent: "center",
           alignItems: "center",
           width: "100%",
-          padding: "0 8px",
+          padding: "0 4px",
         }}
       >
-        {/* Color swatches */}
-        <div style={{ display: "flex", gap: 4 }}>
-          {PALETTE.map((p) => (
+        {/* Color wheel button — opens an HSL color picker. The button's
+            fill shows the current pen color. Quick-access swatches follow. */}
+        <button
+          onClick={() => setWheelOpen(true)}
+          aria-label="Open color wheel"
+          title="Open color wheel"
+          style={{
+            width: 32,
+            height: 32,
+            padding: 0,
+            borderRadius: 16,
+            background:
+              "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)",
+            border:
+              tool !== "eraser" ? "3px solid var(--fg)" : "1px solid var(--border)",
+            cursor: "pointer",
+            position: "relative",
+          }}
+        >
+          <span
+            style={{
+              position: "absolute",
+              inset: 6,
+              borderRadius: "50%",
+              background: color,
+              boxShadow: "0 0 0 1px rgba(0,0,0,0.3)",
+            }}
+          />
+        </button>
+        <div style={{ display: "flex", gap: 3 }}>
+          {QUICK_COLORS.map((p) => (
             <button
               key={p.color}
               onClick={() => {
                 setColor(p.color);
-                // Tapping a color while in eraser mode jumps back to pen.
                 if (tool === "eraser") setTool("pen");
               }}
               aria-label={`Color ${p.label}`}
               style={{
-                width: 28,
-                height: 28,
+                width: 26,
+                height: 26,
                 padding: 0,
-                borderRadius: 14,
+                borderRadius: 13,
                 background: p.color,
                 border:
                   tool !== "eraser" && color === p.color
@@ -335,27 +367,37 @@ export default function DrawingCanvas({
             />
           ))}
         </div>
-        {/* Tool toggles: pen / eraser / fill */}
         <ToolButton
           active={tool === "pen"}
           onClick={() => setTool("pen")}
           ariaLabel="Pen"
-          glyph="✏️"
+          icon={<PenIcon />}
         />
         <ToolButton
           active={tool === "eraser"}
           onClick={() => setTool("eraser")}
           ariaLabel="Eraser"
-          glyph="🧹"
+          icon={<EraserIcon />}
         />
         <ToolButton
           active={tool === "fill"}
           onClick={() => setTool("fill")}
           ariaLabel="Fill bucket"
-          glyph="🪣"
+          icon={<FillIcon />}
         />
-        {/* Stroke widths — only meaningful for pen/eraser. */}
-        <div style={{ display: "flex", gap: 4, opacity: tool === "fill" ? 0.4 : 1 }}>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 6,
+          justifyContent: "center",
+          alignItems: "center",
+          width: "100%",
+          padding: "0 4px",
+        }}
+      >
+        <div style={{ display: "flex", gap: 3, opacity: tool === "fill" ? 0.4 : 1 }}>
           {WIDTHS.map((w) => (
             <button
               key={w.label}
@@ -363,15 +405,14 @@ export default function DrawingCanvas({
               disabled={tool === "fill"}
               aria-label={`Width ${w.label}`}
               style={{
-                width: 36,
-                height: 28,
+                width: 32,
+                height: 26,
                 display: "grid",
                 placeItems: "center",
-                background:
-                  width === w.w ? "var(--accent)" : "var(--bg-elev)",
+                background: width === w.w ? "var(--accent)" : "var(--bg-elev)",
                 color: width === w.w ? "var(--accent-fg)" : "var(--fg)",
                 border: "1px solid var(--border)",
-                borderRadius: 8,
+                borderRadius: 6,
                 padding: 0,
                 cursor: tool === "fill" ? "not-allowed" : "pointer",
               }}
@@ -379,8 +420,8 @@ export default function DrawingCanvas({
               <span
                 style={{
                   display: "block",
-                  width: Math.min(w.w * 0.9, 20),
-                  height: Math.min(w.w * 0.9, 20),
+                  width: Math.min(w.w * 0.9, 18),
+                  height: Math.min(w.w * 0.9, 18),
                   borderRadius: "50%",
                   background: width === w.w ? "var(--accent-fg)" : "var(--fg)",
                 }}
@@ -396,9 +437,9 @@ export default function DrawingCanvas({
             background: "var(--bg-elev)",
             color: "var(--fg)",
             border: "1px solid var(--border)",
-            borderRadius: 8,
-            padding: "6px 10px",
-            fontSize: 16,
+            borderRadius: 6,
+            padding: "4px 10px",
+            fontSize: 14,
           }}
         >
           ↶ Undo
@@ -410,84 +451,309 @@ export default function DrawingCanvas({
             background: "var(--bg-elev)",
             color: "var(--fg)",
             border: "1px solid var(--border)",
-            borderRadius: 8,
-            padding: "6px 10px",
-            fontSize: 16,
+            borderRadius: 6,
+            padding: "4px 10px",
+            fontSize: 14,
           }}
         >
           ✕ Clear
         </button>
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          width: "100%",
-          padding: "0 8px",
-          alignItems: "center",
-        }}
-      >
-        {bottomHint && (
-          <div style={{ color: "var(--muted)", fontSize: 14, flex: 1 }}>
-            {bottomHint}
-          </div>
-        )}
         <button
           onClick={submit}
           disabled={submitting}
           style={{
-            flex: 1,
-            fontSize: 18,
-            padding: "12px 20px",
+            marginLeft: "auto",
+            fontSize: 16,
+            padding: "8px 16px",
           }}
         >
-          {submitting ? "Submitting…" : "Done drawing"}
+          {submitting ? "Submitting…" : "Done"}
         </button>
       </div>
 
       {confirmClear && (
-        <div
-          role="dialog"
-          aria-modal
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "grid",
-            placeItems: "center",
-            zIndex: 50,
+        <ConfirmModal
+          message="Wipe the canvas?"
+          onCancel={() => setConfirmClear(false)}
+          onConfirm={clearAll}
+          confirmLabel="Yes, clear"
+        />
+      )}
+
+      {wheelOpen && (
+        <ColorWheelModal
+          initial={color}
+          onPick={(c) => {
+            setColor(c);
+            if (tool === "eraser") setTool("pen");
+            setWheelOpen(false);
           }}
-          onClick={() => setConfirmClear(false)}
+          onClose={() => setWheelOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Color wheel modal
+// ──────────────────────────────────────────────────────────────────
+
+// HSL color wheel: hue around the circle, saturation outward from
+// center. A separate lightness slider underneath tints/shades the
+// selected hue+sat. Tap-anywhere on the wheel to set color; the
+// preview swatch on the side shows the current pick.
+function ColorWheelModal({
+  initial,
+  onPick,
+  onClose,
+}: {
+  initial: string;
+  onPick: (c: string) => void;
+  onClose: () => void;
+}) {
+  // Decompose the incoming color into HSL so the picker opens on the
+  // current value. Defaults to mid-saturation red if parsing fails.
+  const init = hexToHsl(initial) ?? { h: 0, s: 80, l: 50 };
+  const [h, setH] = useState(init.h);
+  const [s, setS] = useState(init.s);
+  const [l, setL] = useState(init.l);
+  const wheelRef = useRef<HTMLDivElement | null>(null);
+
+  const pickFromWheel = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = wheelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    // Angle 0 at top, increasing clockwise — matches the conic-gradient
+    // we're rendering.
+    const angle = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+    const hue = ((angle % 360) + 360) % 360;
+    const radius = rect.width / 2;
+    const dist = Math.min(radius, Math.sqrt(dx * dx + dy * dy));
+    const sat = Math.round((dist / radius) * 100);
+    setH(Math.round(hue));
+    setS(sat);
+  };
+
+  const current = hslToHex(h, s, l);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.6)",
+        display: "grid",
+        placeItems: "center",
+        zIndex: 60,
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--bg-elev)",
+          border: "1px solid var(--border)",
+          borderRadius: 14,
+          padding: 16,
+          maxWidth: 340,
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
+          alignItems: "center",
+        }}
+      >
+        <div style={{ fontSize: 18, fontWeight: 700 }}>Color wheel</div>
+        <div
+          ref={wheelRef}
+          onPointerDown={(e) => {
+            (e.target as Element).setPointerCapture?.(e.pointerId);
+            pickFromWheel(e);
+          }}
+          onPointerMove={(e) => {
+            if (e.buttons === 0 && e.pointerType === "mouse") return;
+            pickFromWheel(e);
+          }}
+          style={{
+            width: 240,
+            height: 240,
+            borderRadius: "50%",
+            background:
+              "conic-gradient(from -90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)",
+            position: "relative",
+            touchAction: "none",
+            cursor: "crosshair",
+          }}
+        >
+          {/* White-to-transparent radial overlay = saturation falls
+              off toward the center (white = 0% sat). */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "50%",
+              background:
+                "radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0) 70%)",
+              pointerEvents: "none",
+            }}
+          />
+          {/* Indicator dot at the current (h, s) position. */}
+          <Indicator h={h} s={s} />
+        </div>
+
+        {/* Lightness slider */}
+        <div style={{ width: "100%", padding: "0 8px" }}>
+          <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 4 }}>
+            Lightness
+          </div>
+          <input
+            type="range"
+            min={5}
+            max={95}
+            value={l}
+            onChange={(e) => setL(Number(e.target.value))}
+            style={{
+              width: "100%",
+              accentColor: current,
+            }}
+          />
+        </div>
+
+        {/* Preview + apply */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            width: "100%",
+          }}
         >
           <div
-            onClick={(e) => e.stopPropagation()}
+            aria-label="Preview"
             style={{
-              background: "var(--bg-elev)",
+              width: 56,
+              height: 56,
+              borderRadius: 14,
+              background: current,
               border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: 20,
-              maxWidth: 320,
-              textAlign: "center",
+              boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.1)",
+            }}
+          />
+          <div
+            style={{
+              flex: 1,
+              fontFamily: "monospace",
+              fontSize: 16,
+              color: "var(--fg)",
             }}
           >
-            <p style={{ marginTop: 0 }}>Wipe the canvas?</p>
-            <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-              <button
-                onClick={() => setConfirmClear(false)}
-                style={{
-                  background: "var(--bg)",
-                  color: "var(--fg)",
-                  border: "1px solid var(--border)",
-                }}
-              >
-                Cancel
-              </button>
-              <button onClick={clearAll}>Yes, clear</button>
-            </div>
+            {current}
           </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "var(--bg)",
+              color: "var(--fg)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            Cancel
+          </button>
+          <button onClick={() => onPick(current)}>Use</button>
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
+
+function Indicator({ h, s }: { h: number; s: number }) {
+  // Position the dot on the wheel using the same coordinate system as
+  // the conic-gradient (0° at top, clockwise).
+  const radius = 120; // half of wheel size
+  const a = ((h - 90) * Math.PI) / 180;
+  const r = (s / 100) * (radius - 6);
+  const x = radius + r * Math.cos(a) - 6;
+  const y = radius + r * Math.sin(a) - 6;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: x,
+        top: y,
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        background: "rgba(255,255,255,0.95)",
+        boxShadow: "0 0 0 1.5px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.4)",
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Simple confirm dialog
+// ──────────────────────────────────────────────────────────────────
+
+function ConfirmModal({
+  message,
+  onCancel,
+  onConfirm,
+  confirmLabel,
+}: {
+  message: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+  confirmLabel: string;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.5)",
+        display: "grid",
+        placeItems: "center",
+        zIndex: 50,
+      }}
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "var(--bg-elev)",
+          border: "1px solid var(--border)",
+          borderRadius: 12,
+          padding: 20,
+          maxWidth: 320,
+          textAlign: "center",
+        }}
+      >
+        <p style={{ marginTop: 0 }}>{message}</p>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          <button
+            onClick={onCancel}
+            style={{
+              background: "var(--bg)",
+              color: "var(--fg)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            Cancel
+          </button>
+          <button onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -496,12 +762,12 @@ function ToolButton({
   active,
   onClick,
   ariaLabel,
-  glyph,
+  icon,
 }: {
   active: boolean;
   onClick: () => void;
   ariaLabel: string;
-  glyph: string;
+  icon: React.ReactNode;
 }) {
   return (
     <button
@@ -512,20 +778,160 @@ function ToolButton({
         background: active ? "var(--accent)" : "var(--bg-elev)",
         color: active ? "var(--accent-fg)" : "var(--fg)",
         border: "1px solid var(--border)",
-        borderRadius: 8,
-        padding: "6px 10px",
-        fontSize: 18,
+        borderRadius: 6,
+        padding: "5px 9px",
+        fontSize: 16,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
       }}
     >
-      {glyph}
+      {icon}
     </button>
   );
 }
 
-// Render a single mark (stroke or fill) onto a canvas context. `scale`
-// converts normalized 0..1000 units into display pixels. `pxSize` and
-// `dpr` are needed for the flood-fill path which operates on the
-// real pixel buffer.
+// Small inline SVG icons — give the toolbar a consistent silhouette
+// independent of emoji rendering (the broom emoji we had before reads
+// as "sweeping", not "eraser").
+function PenIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M14 4 L20 10 L9 21 L3 21 L3 15 Z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M13 5 L19 11" stroke="rgba(0,0,0,0.25)" strokeWidth="1" />
+    </svg>
+  );
+}
+
+function EraserIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
+      {/* Pink pencil-eraser block tilted, with a metal ferrule. */}
+      <g transform="rotate(-30 12 12)">
+        <rect
+          x="3"
+          y="10"
+          width="13"
+          height="8"
+          rx="1.5"
+          fill="#f48aa7"
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+        <rect
+          x="13"
+          y="10"
+          width="4"
+          height="8"
+          fill="#b8b8c2"
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+        <line
+          x1="14.2"
+          y1="10"
+          x2="14.2"
+          y2="18"
+          stroke="currentColor"
+          strokeWidth="0.6"
+        />
+        <line
+          x1="15.6"
+          y1="10"
+          x2="15.6"
+          y2="18"
+          stroke="currentColor"
+          strokeWidth="0.6"
+        />
+      </g>
+    </svg>
+  );
+}
+
+function FillIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden>
+      {/* Paint bucket tipped, with a drop. */}
+      <path
+        d="M5 9 L13 3 L20 9 L13 15 Z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M5 9 L13 15 L13 20 L5 14 Z" fill="currentColor" opacity="0.6" />
+      <circle cx="20" cy="17" r="2.2" fill="#3a6dd0" />
+    </svg>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Color math helpers
+// ──────────────────────────────────────────────────────────────────
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sf = s / 100;
+  const lf = l / 100;
+  const c = (1 - Math.abs(2 * lf - 1)) * sf;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = lf - c / 2;
+  let r = 0,
+    g = 0,
+    b = 0;
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else[r, g, b] = [c, 0, x];
+  const to2 = (v: number) =>
+    Math.round((v + m) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${to2(r)}${to2(g)}${to2(b)}`;
+}
+
+function hexToHsl(hex: string): { h: number; s: number; l: number } | null {
+  const m = hex.match(/^#([0-9a-f]{6})$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r:
+        h = (g - b) / d + (g < b ? 6 : 0);
+        break;
+      case g:
+        h = (b - r) / d + 2;
+        break;
+      case b:
+        h = (r - g) / d + 4;
+        break;
+    }
+    h *= 60;
+  }
+  return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Mark rendering — shared with DrawingReplay
+// ──────────────────────────────────────────────────────────────────
+
 export function drawMarkOnCtx(
   ctx: CanvasRenderingContext2D,
   mark: DrawStroke,
@@ -538,7 +944,6 @@ export function drawMarkOnCtx(
     floodFill(ctx, mark.x * scale * dpr, mark.y * scale * dpr, mark.color, pxSize * dpr);
     return;
   }
-  // Stroke
   const color = mark.erase ? bgFill : mark.color;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
@@ -561,12 +966,6 @@ export function drawMarkOnCtx(
   ctx.stroke();
 }
 
-// Stack-based 4-connected flood fill. Reads the canvas pixel buffer,
-// fills connected pixels matching the seed color (within a tolerance
-// to bridge anti-aliased stroke edges), writes the result back.
-//
-// `sxPx` / `syPx` are in BACKING-STORE pixels (so already multiplied
-// by devicePixelRatio).
 export function floodFill(
   ctx: CanvasRenderingContext2D,
   sxPx: number,
@@ -589,9 +988,6 @@ export function floodFill(
   const sb = data[start + 2];
   const sa = data[start + 3];
   if (sr === t.r && sg === t.g && sb === t.b && sa === 255) return;
-  // Bridge anti-aliased edges — small RGB tolerance lets the fill
-  // reach the visual boundary of a stroke instead of stopping a few
-  // pixels short on its blurry rim.
   const TOL = 28;
   const stack: number[] = [sx, sy];
   while (stack.length) {
@@ -599,7 +995,8 @@ export function floodFill(
     const px = stack.pop()!;
     if (px < 0 || px >= w || py < 0 || py >= h) continue;
     const i = (py * w + px) * 4;
-    if (data[i] === t.r && data[i + 1] === t.g && data[i + 2] === t.b && data[i + 3] === 255) continue;
+    if (data[i] === t.r && data[i + 1] === t.g && data[i + 2] === t.b && data[i + 3] === 255)
+      continue;
     if (
       Math.abs(data[i] - sr) > TOL ||
       Math.abs(data[i + 1] - sg) > TOL ||
@@ -624,4 +1021,4 @@ function parseHexColor(hex: string): { r: number; g: number; b: number; a: numbe
   return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 255 };
 }
 
-export { PALETTE as POLLINART_PALETTE };
+export { QUICK_COLORS as POLLINART_PALETTE };

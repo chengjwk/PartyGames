@@ -32,7 +32,16 @@ export default function GameMenu({ state, send, isHost = true }: GameMenuProps) 
     );
   }
 
-  const canPause = state.phase === "ROUND_PLAYING";
+  // Pollinart introduces extra in-game phases (WORD_PICK, DRAW_PHASE,
+  // GUESS_PHASE) that are cast through `as PublicGameState` so they
+  // arrive here as string-typed phase values. Treat any of them as
+  // pausable. Cast through `string` to satisfy the narrow Phase type.
+  const phaseStr = state.phase as string;
+  const canPause =
+    phaseStr === "ROUND_PLAYING" ||
+    phaseStr === "WORD_PICK" ||
+    phaseStr === "DRAW_PHASE" ||
+    phaseStr === "GUESS_PHASE";
 
   return (
     <>

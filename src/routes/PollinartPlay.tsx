@@ -252,7 +252,7 @@ export default function PollinartPlay() {
           roomCode={roomCode}
           disconnected={disconnected}
           showQR={false}
-          game="word"
+          game="draw"
           onResume={() => send({ type: "togglePause" })}
         />
       )}
@@ -547,6 +547,7 @@ function ActiveStep({
       <DrawView
         header={header}
         task={task}
+        players={state.players}
         onSubmit={(drawing) =>
           send({
             type: "submitDrawing",
@@ -564,6 +565,7 @@ function ActiveStep({
       <GuessView
         header={header}
         task={task}
+        players={state.players}
         onSubmit={(guess) =>
           send({
             type: "submitGuess",
@@ -582,15 +584,20 @@ function DrawView({
   header,
   task,
   onSubmit,
+  players,
 }: {
   header: React.ReactNode;
   task: Extract<PollinartPrivateState["task"], { kind: "draw" }>;
   onSubmit: (d: Drawing) => void;
+  players: Player[];
 }) {
+  const nextName =
+    task.nextPlayerId &&
+    (players.find((p) => p.id === task.nextPlayerId)?.name ?? null);
   return (
     <main
       style={{
-        padding: "60px 0 24px",
+        padding: "56px 0 16px",
         display: "flex",
         flexDirection: "column",
         minHeight: "100dvh",
@@ -599,20 +606,18 @@ function DrawView({
       {header}
       <div
         style={{
-          padding: "0 12px 12px",
+          padding: "0 8px 8px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 8,
+          gap: 6,
           flex: 1,
         }}
       >
         <DrawingCanvas
           onSubmit={onSubmit}
           promptWord={task.promptedWord}
-          // When the server's draw-phase deadline approaches, the
-          // canvas auto-submits whatever the player has so far —
-          // beats the server's empty auto-fill to the punch.
+          passHint={nextName ? `Passing to ${nextName}` : undefined}
           autoSubmitAt={task.phaseEndsAt}
         />
       </div>
@@ -624,44 +629,86 @@ function GuessView({
   header,
   task,
   onSubmit,
+  players,
 }: {
   header: React.ReactNode;
   task: Extract<PollinartPrivateState["task"], { kind: "guess" }>;
   onSubmit: (g: string) => void;
+  players: Player[];
 }) {
   const [guess, setGuess] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Visual viewport height — falls back to window.innerHeight on
+  // browsers without VisualViewport. On mobile this shrinks when
+  // the keyboard opens; we use it to keep the input bar visible.
+  const [vh, setVh] = useState(() =>
+    typeof window !== "undefined" ? window.innerHeight : 800,
+  );
+  // Sticky bottom inset — pushes the input above the keyboard.
+  const [keyboardInset, setKeyboardInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      setVh(vv.height);
+      // The keyboard occludes (window.innerHeight - vv.height) pixels
+      // at the bottom of the page. visualViewport.offsetTop accounts
+      // for cases where the page itself has scrolled.
+      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setKeyboardInset(inset);
+    };
+    vv.addEventListener("resize", onResize);
+    vv.addEventListener("scroll", onResize);
+    onResize();
+    return () => {
+      vv.removeEventListener("resize", onResize);
+      vv.removeEventListener("scroll", onResize);
+    };
+  }, []);
+
   const submit = () => {
     if (submitting) return;
     setSubmitting(true);
     onSubmit(guess);
   };
-  // Reset on task change (new step).
   useEffect(() => {
     setGuess("");
     setSubmitting(false);
   }, [task.chainId, task.stepIndex]);
 
-  // Compute responsive canvas size — fit-to-window.
-  const [size, setSize] = useState(() =>
-    Math.min(window.innerWidth - 32, window.innerHeight - 280, 480),
-  );
+  // Auto-submit at deadline so a player typing right up to the buzzer
+  // still gets their guess in — beats the server's empty auto-fill.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  const guessRef = useRef(guess);
+  guessRef.current = guess;
   useEffect(() => {
-    const measure = () =>
-      setSize(Math.min(window.innerWidth - 32, window.innerHeight - 280, 480));
-    measure();
-    window.addEventListener("resize", measure);
-    window.addEventListener("orientationchange", measure);
-    return () => {
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("orientationchange", measure);
-    };
-  }, []);
+    if (!task.phaseEndsAt) return;
+    const delay = Math.max(0, task.phaseEndsAt - 600 - Date.now());
+    const id = setTimeout(() => {
+      // Only auto-fire if we haven't already submitted.
+      if (!submitRef.current) return;
+      // Re-read current guess from ref so a late-typed guess gets sent.
+      submitRef.current();
+    }, delay);
+    return () => clearTimeout(id);
+  }, [task.phaseEndsAt, task.chainId, task.stepIndex]);
+
+  // Canvas sizing accounts for keyboard inset and ~190px below the
+  // canvas for the input bar + header + pass-to text.
+  const reservedBelow = 200 + keyboardInset;
+  const size = Math.max(
+    160,
+    Math.min(window.innerWidth - 24, vh - reservedBelow, 520),
+  );
+  const nextName =
+    task.nextPlayerId &&
+    (players.find((p) => p.id === task.nextPlayerId)?.name ?? null);
 
   return (
     <main
       style={{
-        padding: "60px 0 24px",
+        padding: "56px 0 0",
         display: "flex",
         flexDirection: "column",
         minHeight: "100dvh",
@@ -670,34 +717,58 @@ function GuessView({
       {header}
       <div
         style={{
-          padding: "0 16px",
+          padding: "0 12px",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          gap: 16,
+          gap: 8,
+          // Leave room for the sticky input bar at the bottom.
+          paddingBottom: 90 + keyboardInset,
         }}
       >
         <DrawingReplay drawing={task.drawing} size={size} />
-        <div style={{ width: "100%", maxWidth: 480, display: "flex", gap: 8 }}>
-          <input
-            type="text"
-            value={guess}
-            onChange={(e) => setGuess(e.target.value)}
-            placeholder="What is it?"
-            maxLength={60}
-            autoFocus
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            disabled={submitting}
-            style={{ flex: 1, fontSize: 20, padding: 14 }}
-          />
-          <button
-            onClick={submit}
-            disabled={submitting || !guess.trim()}
-            style={{ fontSize: 18, padding: "14px 18px" }}
-          >
-            Send
-          </button>
-        </div>
+        {nextName ? (
+          <div style={{ fontSize: 13, color: "var(--muted)" }}>
+            Passing to {nextName}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: "var(--muted)" }}>Last guess!</div>
+        )}
+      </div>
+      {/* Sticky bottom input bar — rides above the on-screen
+          keyboard via the visualViewport-derived inset. */}
+      <div
+        style={{
+          position: "fixed",
+          left: 0,
+          right: 0,
+          bottom: keyboardInset,
+          background: "var(--bg)",
+          borderTop: "1px solid var(--border)",
+          padding: "10px 12px",
+          display: "flex",
+          gap: 8,
+          zIndex: 30,
+        }}
+      >
+        <input
+          type="text"
+          value={guess}
+          onChange={(e) => setGuess(e.target.value)}
+          placeholder="What is it?"
+          maxLength={60}
+          autoFocus
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          disabled={submitting}
+          style={{ flex: 1, fontSize: 20, padding: 12 }}
+        />
+        <button
+          onClick={submit}
+          disabled={submitting || !guess.trim()}
+          style={{ fontSize: 18, padding: "12px 16px" }}
+        >
+          Send
+        </button>
       </div>
     </main>
   );
@@ -752,12 +823,7 @@ function Reveal({
       <div style={{ color: "var(--muted)", fontSize: 14 }}>
         Started by {startedByPlayer?.name ?? "someone"}
       </div>
-      <ChainPlayback
-        chain={chain}
-        upToStep={stepIndex}
-        state={state}
-        send={send}
-      />
+      <ChainPlayback chain={chain} upToStep={stepIndex} state={state} />
       {isHost && (
         <button
           onClick={() => send({ type: "advanceReveal" })}
@@ -784,120 +850,96 @@ function ChainPlayback({
   chain,
   upToStep,
   state,
-  send,
 }: {
   chain: ChainRevealed;
   upToStep: number;
   state: PollinartPublicGameState;
-  send: (m: PollinartClientMessage) => void;
 }) {
-  const summary = state.roundSummary!;
-  // Seed word always visible first.
-  const lines: React.ReactNode[] = [];
-  lines.push(
-    <ChainEntry
-      key="seed"
-      label="Seed word"
-      content={
-        <strong style={{ fontSize: 22, color: ACCENT }}>
-          {chain.startingWord}
-        </strong>
-      }
-      playerName={
-        state.players.find((p) => p.id === chain.startedBy)?.name ?? ""
-      }
-      reactionKey={null}
-      reactions={null}
-      onReact={null}
-      reactedKind={null}
-    />,
-  );
-  for (let i = 0; i <= Math.min(upToStep, chain.chainLength - 1); i++) {
-    const step = chain.steps.find((s) => s.index === i);
-    if (!step) continue;
-    const player = state.players.find((p) => p.id === step.playerId);
-    const reactionKey = `${chain.id}|${i}`;
-    const reactionAgg = summary.reactions[reactionKey] ?? { heart: 0, bee: 0 };
-    const reactedKind = null; // server doesn't tell us our own kind explicitly; UI tracks via local toggles client-side if desired
-    if (step.kind === "draw") {
-      lines.push(
-        <ChainEntry
-          key={i}
-          label={`Step ${i + 1} · drew`}
-          playerName={player?.name ?? ""}
-          content={
-            <DrawingReplay
-              drawing={step.drawing}
-              size={Math.min(window.innerWidth - 40, 360)}
-              animate
-            />
-          }
-          reactionKey={reactionKey}
-          reactions={reactionAgg}
-          onReact={(kind) =>
-            send({
-              type: "reactToDrawing",
-              chainId: chain.id,
-              stepIndex: i,
-              kind,
-            })
-          }
-          reactedKind={reactedKind}
-        />,
-      );
-    } else {
-      lines.push(
-        <ChainEntry
-          key={i}
-          label={`Step ${i + 1} · guessed`}
-          playerName={player?.name ?? ""}
-          content={
-            <div style={{ fontSize: 22, color: "var(--fg)", padding: "6px 0" }}>
-              "{step.guess || <em style={{ color: "var(--muted)" }}>(no guess)</em>}"
-              {step.isMatch && (
-                <span
-                  style={{
-                    marginLeft: 8,
-                    fontSize: 14,
-                    padding: "2px 6px",
-                    borderRadius: 6,
-                    background: "rgba(127, 217, 127, 0.25)",
-                    color: "var(--fg)",
-                  }}
-                >
-                  ✓ match
-                </span>
-              )}
-            </div>
-          }
-          reactionKey={null}
-          reactions={null}
-          onReact={null}
-          reactedKind={null}
-        />,
-      );
-    }
+  // Pair the chain's steps as (drawing, guess). Each pair is one
+  // round of the telephone game. With our chainLength guaranteed
+  // even, every drawing has a matching guess at the next index.
+  const pairs: Array<{
+    drawIndex: number;
+    drawerName: string;
+    drawing: ChainRevealed["steps"][number];
+    guesserName: string;
+    guess: ChainRevealed["steps"][number];
+  }> = [];
+  for (let i = 0; i + 1 < chain.chainLength; i += 2) {
+    const draw = chain.steps.find((s) => s.index === i);
+    const guess = chain.steps.find((s) => s.index === i + 1);
+    if (!draw || !guess) continue;
+    pairs.push({
+      drawIndex: i,
+      drawerName: state.players.find((p) => p.id === draw.playerId)?.name ?? "",
+      drawing: draw,
+      guesserName: state.players.find((p) => p.id === guess.playerId)?.name ?? "",
+      guess,
+    });
   }
-  return <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{lines}</div>;
+  // Show only pairs whose guess step has been revealed.
+  const revealedPairs = pairs.filter((p) => p.guess.index <= upToStep);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <SeedCard
+        startingWord={chain.startingWord}
+        starterName={
+          state.players.find((p) => p.id === chain.startedBy)?.name ?? ""
+        }
+      />
+      {revealedPairs.map((pair) => (
+        <ChainPairCard key={pair.drawIndex} pair={pair} compact />
+      ))}
+    </div>
+  );
 }
 
-function ChainEntry({
-  label,
-  playerName,
-  content,
-  reactionKey,
-  reactions,
-  onReact,
-  reactedKind,
+function SeedCard({
+  startingWord,
+  starterName,
 }: {
-  label: string;
-  playerName: string;
-  content: React.ReactNode;
-  reactionKey: string | null;
-  reactions: { heart: number; bee: number } | null;
-  onReact: ((kind: "heart" | "bee") => void) | null;
-  reactedKind: "heart" | "bee" | null;
+  startingWord: string;
+  starterName: string;
 }) {
+  return (
+    <div
+      style={{
+        padding: "10px 14px",
+        background: "var(--bg-elev)",
+        borderRadius: 12,
+        border: "1px solid var(--border)",
+        textAlign: "center",
+      }}
+    >
+      <div style={{ color: "var(--muted)", fontSize: 12 }}>
+        {starterName} started with
+      </div>
+      <strong style={{ fontSize: 26, color: ACCENT }}>{startingWord}</strong>
+    </div>
+  );
+}
+
+// One (drawing, guess) pair card. Drawing on top, guess underneath,
+// match badge to the right of the guess. `compact` shrinks the
+// drawing for the phone column layout.
+export function ChainPairCard({
+  pair,
+  compact,
+}: {
+  pair: {
+    drawIndex: number;
+    drawerName: string;
+    drawing: ChainRevealed["steps"][number];
+    guesserName: string;
+    guess: ChainRevealed["steps"][number];
+  };
+  compact?: boolean;
+}) {
+  if (pair.drawing.kind !== "draw" || pair.guess.kind !== "guess") return null;
+  const size = compact
+    ? Math.min(window.innerWidth - 60, 320)
+    : 360;
+  const matched = pair.guess.isMatch;
   return (
     <div
       style={{
@@ -905,52 +947,61 @@ function ChainEntry({
         background: "var(--bg-elev)",
         borderRadius: 12,
         border: "1px solid var(--border)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        alignItems: "center",
+        minWidth: size + 24,
       }}
     >
-      <div style={{ color: "var(--muted)", fontSize: 12 }}>
-        {label} · {playerName}
+      <div style={{ color: "var(--muted)", fontSize: 12, alignSelf: "stretch" }}>
+        {pair.drawerName} drew
       </div>
-      <div style={{ marginTop: 6 }}>{content}</div>
-      {reactionKey && reactions && onReact && (
-        <div
-          style={{
-            marginTop: 8,
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-          }}
-        >
-          <button
-            onClick={() => onReact("heart")}
-            aria-label="React with heart"
-            style={{
-              background: reactedKind === "heart" ? "var(--accent)" : "var(--bg)",
-              color: reactedKind === "heart" ? "var(--accent-fg)" : "var(--fg)",
-              border: "1px solid var(--border)",
-              padding: "4px 10px",
-              borderRadius: 12,
-              fontSize: 14,
-            }}
-          >
-            ❤️ {reactions.heart}
-          </button>
-          <button
-            onClick={() => onReact("bee")}
-            aria-label="React with bee"
-            style={{
-              background: reactedKind === "bee" ? "var(--accent)" : "var(--bg)",
-              color: reactedKind === "bee" ? "var(--accent-fg)" : "var(--fg)",
-              border: "1px solid var(--border)",
-              padding: "4px 10px",
-              borderRadius: 12,
-              fontSize: 14,
-            }}
-          >
-            🐝 {reactions.bee}
-          </button>
-        </div>
-      )}
+      <DrawingReplay drawing={pair.drawing.drawing} size={size} />
+      <div
+        style={{
+          alignSelf: "stretch",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 20,
+          paddingTop: 4,
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ color: "var(--muted)", fontSize: 12 }}>
+          {pair.guesserName} guessed
+        </span>
+        <strong style={{ color: "var(--fg)", flex: 1 }}>
+          {pair.guess.guess ? (
+            `"${pair.guess.guess}"`
+          ) : (
+            <em style={{ color: "var(--muted)" }}>(no guess)</em>
+          )}
+        </strong>
+        <MatchBadge matched={matched} />
+      </div>
     </div>
+  );
+}
+
+export function MatchBadge({ matched }: { matched: boolean }) {
+  return (
+    <span
+      style={{
+        fontSize: 13,
+        fontWeight: 700,
+        padding: "3px 9px",
+        borderRadius: 12,
+        background: matched
+          ? "rgba(127, 217, 127, 0.22)"
+          : "rgba(255, 140, 140, 0.18)",
+        color: matched ? "#2f7a32" : "#c0494c",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {matched ? "✓ match" : "✗ no match"}
+    </span>
   );
 }
 

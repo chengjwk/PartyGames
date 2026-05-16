@@ -60,10 +60,10 @@ interface PollinartConfig {
 
 const DEFAULT_CONFIG: PollinartConfig = {
   totalRounds: 3,
-  // 60s instead of 45 — playtest feedback was that 45s clipped too
-  // many drawings mid-execution.
-  drawSeconds: 60,
-  guessSeconds: 15,
+  // 75s / 30s after second playtest — 60s was still hurried and 15s
+  // wasn't enough time to type a guess once you saw the drawing.
+  drawSeconds: 75,
+  guessSeconds: 30,
   pickSeconds: 10,
   complexity: "easy",
 };
@@ -509,10 +509,14 @@ export default class PollinartServer implements Party.Server {
     const chain = this.chains[this.revealChainIndex];
     if (!chain) return;
     const curStep = this.revealStepIndex ?? -1;
-    if (curStep < chain.playerSequence.length - 1) {
-      this.revealStepIndex = curStep + 1;
+    // Advance by pairs: each tap reveals one (draw, guess) pair
+    // together rather than uncovering steps one at a time. After
+    // advance, revealStepIndex always lands on a guess step (odd
+    // index), or stays at -1 if only the seed is showing.
+    const next = curStep < 0 ? 1 : curStep + 2;
+    if (next <= chain.playerSequence.length - 1) {
+      this.revealStepIndex = next;
     } else {
-      // Move to next chain, or finish reveal.
       const nextChain = this.revealChainIndex + 1;
       if (nextChain >= this.chains.length) {
         this.endReveal();
@@ -921,6 +925,8 @@ export default class PollinartServer implements Party.Server {
       if (!chain) return { kind: "idle" };
       const already = chain.steps.find((s) => s.index === this.stepIndex);
       if (already) return { kind: "wait", submitted: true };
+      const nextPlayerId =
+        chain.playerSequence[this.stepIndex + 1] ?? null;
       if (this.phase === "DRAW_PHASE") {
         return {
           kind: "draw",
@@ -928,6 +934,7 @@ export default class PollinartServer implements Party.Server {
           stepIndex: this.stepIndex,
           promptedWord: this.promptedWordFor(chain, this.stepIndex),
           phaseEndsAt: this.phaseEndsAt ?? 0,
+          nextPlayerId,
         };
       } else {
         const prev = chain.steps.find((s) => s.index === this.stepIndex - 1);
@@ -939,6 +946,7 @@ export default class PollinartServer implements Party.Server {
           stepIndex: this.stepIndex,
           drawing,
           phaseEndsAt: this.phaseEndsAt ?? 0,
+          nextPlayerId,
         };
       }
     }
