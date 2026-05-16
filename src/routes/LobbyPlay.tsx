@@ -137,13 +137,36 @@ export default function LobbyPlay() {
   }
 
   const isHost = state.hostPlayerId === clientId;
+  const hostName = state.players.find((p) => p.id === state.hostPlayerId)?.name ?? "host";
   return (
     <>
       <GardenBackground />
       <FullscreenButton />
-      <main style={{ minHeight: "100dvh", padding: "60px 20px 24px" }}>
+      <style>{`
+        @keyframes flower-sway-a {
+          0%, 100% { transform: rotate(-2.5deg); }
+          50%      { transform: rotate(2.5deg); }
+        }
+        @keyframes flower-sway-b {
+          0%, 100% { transform: rotate(2deg); }
+          50%      { transform: rotate(-2deg); }
+        }
+        @keyframes flower-bloom {
+          0%   { transform: scale(0.85); }
+          50%  { transform: scale(1.05); }
+          100% { transform: scale(1); }
+        }
+      `}</style>
+      <main
+        style={{
+          minHeight: "100dvh",
+          padding: "60px 20px 0",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         <h1 style={{ margin: 0, color: "var(--accent)" }}>Party Games</h1>
-        <p style={{ color: "var(--muted)" }}>Room {roomCode}</p>
+        <p style={{ color: "var(--muted)", marginTop: 4 }}>Room {roomCode}</p>
         <h2 style={{ fontSize: 22, marginBottom: 8 }}>
           Players <span style={{ color: "var(--muted)" }}>({state.players.length})</span>
         </h2>
@@ -187,56 +210,187 @@ export default function LobbyPlay() {
           ))}
         </ul>
 
-        {isHost ? (
-          <section style={{ marginTop: 24 }}>
-            <h3 style={{ margin: "0 0 12px" }}>Pick a game</h3>
-            <div style={{ display: "grid", gap: 12 }}>
-              <GameButton game="word" onPick={() => send({ type: "pickGame", game: "word" })} />
-              <GameButton game="math" onPick={() => send({ type: "pickGame", game: "math" })} />
-            </div>
-          </section>
-        ) : (
-          <p style={{ color: "var(--muted)", marginTop: 24 }}>
-            Waiting for{" "}
-            <strong style={{ color: "var(--fg)" }}>
-              {state.players.find((p) => p.id === state.hostPlayerId)?.name ?? "host"}
-            </strong>{" "}
-            to pick a game…
-          </p>
-        )}
+        {/* Spacer pushes the garden patch toward the bottom of the
+            viewport so the flowers visually grow up out of the BG grass. */}
+        <div style={{ flex: 1, minHeight: 24 }} />
+
+        <section style={{ paddingBottom: 16 }}>
+          <h3 style={{ margin: "0 0 4px", textAlign: "center", color: "var(--fg)" }}>
+            {isHost ? "Pick a game" : `${hostName} is picking…`}
+          </h3>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+              justifyItems: "center",
+              alignItems: "end",
+            }}
+          >
+            <FlowerButton
+              game="word"
+              swayKeyframes="flower-sway-a"
+              disabled={!isHost}
+              onPick={() => send({ type: "pickGame", game: "word" })}
+            />
+            <FlowerButton
+              game="math"
+              swayKeyframes="flower-sway-b"
+              disabled={!isHost}
+              onPick={() => send({ type: "pickGame", game: "math" })}
+            />
+          </div>
+        </section>
       </main>
     </>
   );
 }
 
-function GameButton({ game, onPick }: { game: LobbyGame; onPick: () => void }) {
+// Flower-shaped game button. Petals + leaf + stem + center disc with the
+// game emoji. Color of the petals identifies the game; geometry matches
+// the GardenBackground's flower style so the picker reads as part of
+// the same garden scene. Gently sways. Disabled state (non-host) keeps
+// the flower visible but desaturated and unclickable.
+function FlowerButton({
+  game,
+  onPick,
+  swayKeyframes,
+  disabled,
+}: {
+  game: LobbyGame;
+  onPick: () => void;
+  swayKeyframes: string;
+  disabled: boolean;
+}) {
   const isWord = game === "word";
+  // Petal colors — yellow for the bee game (matches WordHive --accent),
+  // soft blue for math (matches the MathHive accent).
+  const petalColor = isWord ? "#f7d56e" : "#9ec3ff";
+  const petalHighlight = isWord ? "#fbe89a" : "#c5d9ff";
+  const emoji = isWord ? "🐝" : "🧮";
+  const label = isWord ? "WordHive" : "MathHive";
+  const tagline = isWord ? "Spell with the bees" : "Solve the number";
+
+  // Geometry
+  const PETAL_R = 28;
+  const RING_R = 30;
+  const CENTER_R = 24;
+  const STEM_LEN = 96;
+  const W = 2 * (RING_R + PETAL_R) + 12;
+  const H = STEM_LEN + RING_R + PETAL_R + 8;
+
   return (
     <button
-      onClick={onPick}
+      onClick={disabled ? undefined : onPick}
+      disabled={disabled}
+      aria-label={`Pick ${label}`}
       style={{
-        padding: 20,
-        borderRadius: 14,
-        background: isWord ? "var(--accent)" : "#6aa6ff",
-        color: isWord ? "var(--accent-fg)" : "#0a1a2a",
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
-        textAlign: "left",
-        fontWeight: 700,
+        background: "transparent",
         border: "none",
-        cursor: "pointer",
+        padding: 0,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.55 : 1,
+        filter: disabled ? "saturate(0.6)" : undefined,
+        transition: "opacity 0.2s",
       }}
     >
-      <span style={{ fontSize: 48 }}>{isWord ? "🐝" : "🧮"}</span>
-      <span style={{ flex: 1 }}>
-        <div style={{ fontSize: 22 }}>{isWord ? "WordHive" : "MathHive"}</div>
-        <div style={{ fontSize: 13, fontWeight: 400, opacity: 0.8 }}>
-          {isWord
-            ? "Honeycomb of letters. Words must use the center letter."
-            : "Honeycomb of digits + one operator in the middle."}
-        </div>
-      </span>
+      <svg
+        width={W}
+        height={H}
+        viewBox={`${-W / 2} ${-H} ${W} ${H}`}
+        aria-hidden
+        style={{
+          // Sway origin at the bottom of the stem so the flower head
+          // rocks gently like a real flower in a breeze.
+          transformBox: "fill-box",
+          transformOrigin: "50% 100%",
+          animation: `${swayKeyframes} 4.5s ease-in-out infinite, flower-bloom 0.5s ease-out`,
+          overflow: "visible",
+        }}
+      >
+        {/* Stem */}
+        <line
+          x1={0}
+          y1={0}
+          x2={0}
+          y2={-STEM_LEN}
+          stroke="#244022"
+          strokeWidth={5}
+          strokeLinecap="round"
+        />
+        {/* Leaf */}
+        <ellipse
+          cx={14}
+          cy={-STEM_LEN * 0.45}
+          rx={18}
+          ry={9}
+          fill="#345e30"
+          stroke="#1c3a1c"
+          strokeWidth={1.5}
+          transform={`rotate(35 14 ${-STEM_LEN * 0.45})`}
+        />
+        {/* Petals */}
+        {[0, 1, 2, 3, 4].map((i) => {
+          const a = ((Math.PI * 2) / 5) * i - Math.PI / 2;
+          return (
+            <g key={i}>
+              <circle
+                cx={RING_R * Math.cos(a)}
+                cy={-STEM_LEN + RING_R * Math.sin(a)}
+                r={PETAL_R}
+                fill={petalColor}
+                stroke="#3a2a14"
+                strokeWidth={1.5}
+              />
+              {/* Subtle highlight on each petal for depth */}
+              <circle
+                cx={RING_R * Math.cos(a) - PETAL_R * 0.3}
+                cy={-STEM_LEN + RING_R * Math.sin(a) - PETAL_R * 0.3}
+                r={PETAL_R * 0.35}
+                fill={petalHighlight}
+                opacity={0.55}
+              />
+            </g>
+          );
+        })}
+        {/* Center disc with game emoji */}
+        <circle
+          cx={0}
+          cy={-STEM_LEN}
+          r={CENTER_R}
+          fill="#f4cd44"
+          stroke="#3a2a14"
+          strokeWidth={2}
+        />
+        <text
+          x={0}
+          y={-STEM_LEN + 2}
+          fontSize={CENTER_R * 1.3}
+          textAnchor="middle"
+          dominantBaseline="central"
+          style={{ userSelect: "none" }}
+        >
+          {emoji}
+        </text>
+      </svg>
+      <div style={{ fontSize: 20, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 12,
+          color: "var(--muted)",
+          textAlign: "center",
+          padding: "0 6px",
+          lineHeight: 1.3,
+          maxWidth: 150,
+        }}
+      >
+        {tagline}
+      </div>
     </button>
   );
 }
