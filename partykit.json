@@ -4,6 +4,7 @@
   "main": "party/index.ts",
   "parties": {
     "mathhive": "party/mathhive.ts",
+    "pollinart": "party/pollinart.ts",
     "lobby": "party/lobby.ts"
   },
   "compatibilityDate": "2024-09-01"

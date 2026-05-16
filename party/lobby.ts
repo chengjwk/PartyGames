@@ -10,7 +10,7 @@
 import type * as Party from "partykit/server";
 import type { Player } from "../src/shared/types";
 
-export type LobbyGame = "word" | "math";
+export type LobbyGame = "word" | "math" | "draw";
 
 export interface LobbyState {
   players: Player[];

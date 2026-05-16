@@ -6,6 +6,8 @@ import Host from "./routes/Host";
 import Play from "./routes/Play";
 import MathHost from "./routes/MathHost";
 import MathPlay from "./routes/MathPlay";
+import PollinartHost from "./routes/PollinartHost";
+import PollinartPlay from "./routes/PollinartPlay";
 
 export default function App() {
   return (
@@ -20,6 +22,8 @@ export default function App() {
         <Route path="/play/word/:room" element={<Play />} />
         <Route path="/host/math/:room" element={<MathHost />} />
         <Route path="/play/math/:room" element={<MathPlay />} />
+        <Route path="/host/draw/:room" element={<PollinartHost />} />
+        <Route path="/play/draw/:room" element={<PollinartPlay />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

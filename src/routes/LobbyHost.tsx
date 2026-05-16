@@ -13,8 +13,10 @@ import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import LilyFlower from "../components/LilyFlower";
+import DaisyFlower from "../components/DaisyFlower";
 import ThemeToggle from "../components/ThemeToggle";
 import type {
+  LobbyGame,
   LobbyServerMessage,
   LobbyState,
 } from "../../party/lobby";
@@ -88,6 +90,10 @@ export default function LobbyHost() {
         @keyframes lily-sway-b {
           0%, 100% { transform: rotate(2deg); }
           50%      { transform: rotate(-2deg); }
+        }
+        @keyframes lily-sway-c {
+          0%, 100% { transform: rotate(-1.8deg); }
+          50%      { transform: rotate(2.8deg); }
         }
       `}</style>
       <main
@@ -189,13 +195,14 @@ export default function LobbyHost() {
           <div
             style={{
               display: "flex",
-              gap: 80,
+              gap: 64,
               justifyContent: "center",
               alignItems: "end",
             }}
           >
             <DisplayFlower kind="word" swayKeyframes="lily-sway-a" />
             <DisplayFlower kind="math" swayKeyframes="lily-sway-b" />
+            <DisplayFlower kind="draw" swayKeyframes="lily-sway-c" />
           </div>
         </section>
       </main>
@@ -203,48 +210,92 @@ export default function LobbyHost() {
   );
 }
 
-// TV-side decorative lily. Mirrors the phone picker's flower at TV scale
-// so the host's display shows the same garden patch as their phone. Not
-// interactive — picking happens on the phone. WordHive blooms taller
-// than MathHive to match the phone version's height contrast.
+// TV-side decorative flower. Mirrors the phone picker so the host's
+// display shows the same garden patch as their phone. Not interactive
+// — picking happens on the phone. Each game has its own species + stem
+// height so the silhouettes read as a varied garden.
 function DisplayFlower({
   kind,
   swayKeyframes,
 }: {
-  kind: "word" | "math";
+  kind: LobbyGame;
   swayKeyframes: string;
 }) {
-  const isWord = kind === "word";
-  const petalColor = isWord ? "#f7c84a" : "#7fb3ff";
-  const petalHighlight = isWord ? "#ffe28a" : "#b9d3ff";
-  const emoji = isWord ? "🐝" : "🧮";
-  const label = isWord ? "WordHive" : "MathHive";
-  const stemLength = isWord ? 240 : 175;
-
+  const meta = displayMeta(kind);
+  const centerContent = (
+    <text
+      x={0}
+      y={0}
+      fontSize={42}
+      textAnchor="middle"
+      dominantBaseline="central"
+      style={{ userSelect: "none" }}
+    >
+      {meta.emoji}
+    </text>
+  );
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <LilyFlower
-        petalColor={petalColor}
-        petalHighlight={petalHighlight}
-        stemLength={stemLength}
-        scale={1.7}
-        swayKeyframes={swayKeyframes}
-        centerContent={
-          <text
-            x={0}
-            y={0}
-            fontSize={42}
-            textAnchor="middle"
-            dominantBaseline="central"
-            style={{ userSelect: "none" }}
-          >
-            {emoji}
-          </text>
-        }
-      />
-      <div style={{ fontSize: 32, fontWeight: 700, color: "var(--fg)", marginTop: 8 }}>
-        {label}
+      {meta.flower === "lily" ? (
+        <LilyFlower
+          petalColor={meta.petalColor}
+          petalHighlight={meta.petalHighlight}
+          stemLength={meta.stemLength}
+          scale={1.6}
+          swayKeyframes={swayKeyframes}
+          centerContent={centerContent}
+        />
+      ) : (
+        <DaisyFlower
+          petalColor={meta.petalColor}
+          petalEdge={meta.petalHighlight}
+          stemLength={meta.stemLength}
+          scale={1.6}
+          swayKeyframes={swayKeyframes}
+          centerContent={centerContent}
+        />
+      )}
+      <div style={{ fontSize: 28, fontWeight: 700, color: "var(--fg)", marginTop: 8 }}>
+        {meta.label}
       </div>
     </div>
   );
+}
+
+function displayMeta(game: LobbyGame): {
+  label: string;
+  emoji: string;
+  flower: "lily" | "daisy";
+  petalColor: string;
+  petalHighlight: string;
+  stemLength: number;
+} {
+  if (game === "word") {
+    return {
+      label: "WordHive",
+      emoji: "🐝",
+      flower: "lily",
+      petalColor: "#f7c84a",
+      petalHighlight: "#ffe28a",
+      stemLength: 240,
+    };
+  }
+  if (game === "math") {
+    return {
+      label: "MathHive",
+      emoji: "🧮",
+      flower: "lily",
+      petalColor: "#7fb3ff",
+      petalHighlight: "#b9d3ff",
+      stemLength: 175,
+    };
+  }
+  return {
+    label: "Pollinart",
+    emoji: "🎨",
+    flower: "daisy",
+    petalColor: "#f8f4ec",
+    petalHighlight: "#c8b8a4",
+    stemLength: 205,
+  };
 }

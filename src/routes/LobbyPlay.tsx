@@ -15,6 +15,7 @@ import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import LilyFlower from "../components/LilyFlower";
+import DaisyFlower from "../components/DaisyFlower";
 import ThemeToggle from "../components/ThemeToggle";
 import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import type {
@@ -177,6 +178,10 @@ export default function LobbyPlay() {
           0%, 100% { transform: rotate(2deg); }
           50%      { transform: rotate(-2deg); }
         }
+        @keyframes lily-sway-c {
+          0%, 100% { transform: rotate(-1.8deg); }
+          50%      { transform: rotate(2.8deg); }
+        }
         @keyframes lily-bloom {
           0%   { transform: scale(0.85); }
           50%  { transform: scale(1.05); }
@@ -247,8 +252,8 @@ export default function LobbyPlay() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: 8,
               justifyItems: "center",
               alignItems: "end",
             }}
@@ -265,6 +270,12 @@ export default function LobbyPlay() {
               disabled={!isHost}
               onPick={() => send({ type: "pickGame", game: "math" })}
             />
+            <FlowerButton
+              game="draw"
+              swayKeyframes="lily-sway-c"
+              disabled={!isHost}
+              onPick={() => send({ type: "pickGame", game: "draw" })}
+            />
           </div>
         </section>
       </main>
@@ -272,9 +283,11 @@ export default function LobbyPlay() {
   );
 }
 
-// Game-picker flower — lily-shaped tappable button. WordHive blooms a
-// little taller than MathHive so they don't look like clones; both grow
-// up from the same ground line (alignItems: "end" on the grid).
+// Game-picker flower — tappable button. Each game has its own species so
+// the picker reads as a small garden patch rather than three clones.
+// WordHive and MathHive are lilies (honey-yellow / soft-blue) at slightly
+// different stem heights; Pollinart is a white daisy. All grow up from
+// the same ground line (alignItems: "end" on the grid).
 function FlowerButton({
   game,
   onPick,
@@ -286,22 +299,13 @@ function FlowerButton({
   swayKeyframes: string;
   disabled: boolean;
 }) {
-  const isWord = game === "word";
-  // Petal colors — honey-yellow for the bee game, soft blue for math.
-  const petalColor = isWord ? "#f7c84a" : "#7fb3ff";
-  const petalHighlight = isWord ? "#ffe28a" : "#b9d3ff";
-  const emoji = isWord ? "🐝" : "🧮";
-  const label = isWord ? "WordHive" : "MathHive";
-  const tagline = isWord ? "Spell with the bees" : "Solve the number";
-  // Different stem heights so the two flowers feel like distinct plants
-  // rather than mirror images. WordHive (older) blooms a bit taller.
-  const stemLength = isWord ? 130 : 96;
+  const meta = pickerMeta(game);
 
   return (
     <button
       onClick={disabled ? undefined : onPick}
       disabled={disabled}
-      aria-label={`Pick ${label}`}
+      aria-label={`Pick ${meta.label}`}
       style={{
         background: "transparent",
         border: "none",
@@ -315,43 +319,113 @@ function FlowerButton({
         transition: "opacity 0.2s",
       }}
     >
-      <LilyFlower
-        petalColor={petalColor}
-        petalHighlight={petalHighlight}
-        stemLength={stemLength}
-        scale={0.9}
-        swayKeyframes={swayKeyframes}
-        bloomIn
-        centerContent={
-          <text
-            x={0}
-            y={0}
-            fontSize={20}
-            textAnchor="middle"
-            dominantBaseline="central"
-            style={{ userSelect: "none" }}
-          >
-            {emoji}
-          </text>
-        }
-      />
-      <div style={{ fontSize: 20, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
-        {label}
+      {meta.flower === "lily" ? (
+        <LilyFlower
+          petalColor={meta.petalColor}
+          petalHighlight={meta.petalHighlight}
+          stemLength={meta.stemLength}
+          scale={0.8}
+          swayKeyframes={swayKeyframes}
+          bloomIn
+          centerContent={
+            <text
+              x={0}
+              y={0}
+              fontSize={18}
+              textAnchor="middle"
+              dominantBaseline="central"
+              style={{ userSelect: "none" }}
+            >
+              {meta.emoji}
+            </text>
+          }
+        />
+      ) : (
+        <DaisyFlower
+          petalColor={meta.petalColor}
+          petalEdge={meta.petalHighlight}
+          stemLength={meta.stemLength}
+          scale={0.8}
+          swayKeyframes={swayKeyframes}
+          bloomIn
+          centerContent={
+            <text
+              x={0}
+              y={0}
+              fontSize={18}
+              textAnchor="middle"
+              dominantBaseline="central"
+              style={{ userSelect: "none" }}
+            >
+              {meta.emoji}
+            </text>
+          }
+        />
+      )}
+      <div style={{ fontSize: 18, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
+        {meta.label}
       </div>
       <div
         style={{
-          fontSize: 12,
+          fontSize: 11,
           color: "var(--muted)",
           textAlign: "center",
-          padding: "0 6px",
+          padding: "0 4px",
           lineHeight: 1.3,
-          maxWidth: 150,
+          maxWidth: 120,
         }}
       >
-        {tagline}
+        {meta.tagline}
       </div>
     </button>
   );
+}
+
+// Single source of truth for the picker visuals — used here and on the
+// TV (LobbyHost). Pollinart blooms tallest because the daisy reads as a
+// younger / fresher addition; WordHive is established middle; MathHive
+// is the short one to keep the garden silhouette varied.
+export function pickerMeta(game: LobbyGame): {
+  label: string;
+  tagline: string;
+  emoji: string;
+  flower: "lily" | "daisy";
+  petalColor: string;
+  petalHighlight: string;
+  stemLength: number;
+} {
+  if (game === "word") {
+    return {
+      label: "WordHive",
+      tagline: "Spell with the bees",
+      emoji: "🐝",
+      flower: "lily",
+      petalColor: "#f7c84a",
+      petalHighlight: "#ffe28a",
+      stemLength: 130,
+    };
+  }
+  if (game === "math") {
+    return {
+      label: "MathHive",
+      tagline: "Solve the number",
+      emoji: "🧮",
+      flower: "lily",
+      petalColor: "#7fb3ff",
+      petalHighlight: "#b9d3ff",
+      stemLength: 96,
+    };
+  }
+  // draw → Pollinart
+  return {
+    label: "Pollinart",
+    tagline: "Draw, guess, repeat",
+    emoji: "🎨",
+    flower: "daisy",
+    petalColor: "#f8f4ec",
+    petalHighlight: "#c8b8a4",
+    stemLength: 112,
+  };
 }
 
 function NameEntry({
