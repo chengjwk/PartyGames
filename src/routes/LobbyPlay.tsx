@@ -16,6 +16,7 @@ import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import LilyFlower from "../components/LilyFlower";
 import DaisyFlower from "../components/DaisyFlower";
+import PetalFlower from "../components/PetalFlower";
 import ThemeToggle from "../components/ThemeToggle";
 import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import type {
@@ -319,49 +320,58 @@ function FlowerButton({
         transition: "opacity 0.2s",
       }}
     >
-      {meta.flower === "lily" ? (
-        <LilyFlower
-          petalColor={meta.petalColor}
-          petalHighlight={meta.petalHighlight}
-          stemLength={meta.stemLength}
-          scale={0.8}
-          swayKeyframes={swayKeyframes}
-          bloomIn
-          centerContent={
-            <text
-              x={0}
-              y={0}
-              fontSize={18}
-              textAnchor="middle"
-              dominantBaseline="central"
-              style={{ userSelect: "none" }}
-            >
-              {meta.emoji}
-            </text>
-          }
-        />
-      ) : (
-        <DaisyFlower
-          petalColor={meta.petalColor}
-          petalEdge={meta.petalHighlight}
-          stemLength={meta.stemLength}
-          scale={0.8}
-          swayKeyframes={swayKeyframes}
-          bloomIn
-          centerContent={
-            <text
-              x={0}
-              y={0}
-              fontSize={18}
-              textAnchor="middle"
-              dominantBaseline="central"
-              style={{ userSelect: "none" }}
-            >
-              {meta.emoji}
-            </text>
-          }
-        />
-      )}
+      {(() => {
+        const centerContent = (
+          <text
+            x={0}
+            y={0}
+            fontSize={18}
+            textAnchor="middle"
+            dominantBaseline="central"
+            style={{ userSelect: "none" }}
+          >
+            {meta.emoji}
+          </text>
+        );
+        if (meta.flower === "lily") {
+          return (
+            <LilyFlower
+              petalColor={meta.petalColor}
+              petalHighlight={meta.petalHighlight}
+              stemLength={meta.stemLength}
+              scale={0.8}
+              swayKeyframes={swayKeyframes}
+              bloomIn
+              centerContent={centerContent}
+            />
+          );
+        }
+        if (meta.flower === "daisy") {
+          return (
+            <DaisyFlower
+              petalColor={meta.petalColor}
+              petalEdge={meta.petalHighlight}
+              stemLength={meta.stemLength}
+              scale={0.8}
+              swayKeyframes={swayKeyframes}
+              bloomIn
+              centerContent={centerContent}
+            />
+          );
+        }
+        // petal — WordHive's original 5-round-petal flower.
+        return (
+          <PetalFlower
+            petalColor={meta.petalColor}
+            petalEdge={meta.petalHighlight}
+            stemLength={meta.stemLength}
+            scale={0.8}
+            swayKeyframes={swayKeyframes}
+            bloomIn
+            centerContent={centerContent}
+          />
+        );
+      })()}
       <div style={{ fontSize: 18, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
         {meta.label}
       </div>
@@ -382,15 +392,20 @@ function FlowerButton({
 }
 
 // Single source of truth for the picker visuals — used here and on the
-// TV (LobbyHost). Pollinart blooms tallest because the daisy reads as a
-// younger / fresher addition; WordHive is established middle; MathHive
-// is the short one to keep the garden silhouette varied.
+// TV (LobbyHost). Each game gets its own flower species so the three
+// silhouettes in the picker patch read as distinct plants rather than
+// recolored clones.
+//   - WordHive  → 5-round-petal flower ("petal"), honey yellow
+//   - MathHive  → lily, soft blue
+//   - Pollinart → daisy, white
 export function pickerMeta(game: LobbyGame): {
   label: string;
   tagline: string;
   emoji: string;
-  flower: "lily" | "daisy";
+  flower: "lily" | "daisy" | "petal";
   petalColor: string;
+  // For lily this is the inner highlight; for daisy/petal it's the
+  // outline / edge tint. Same prop name to keep the call sites uniform.
   petalHighlight: string;
   stemLength: number;
 } {
@@ -399,10 +414,10 @@ export function pickerMeta(game: LobbyGame): {
       label: "WordHive",
       tagline: "Spell with the bees",
       emoji: "🐝",
-      flower: "lily",
+      flower: "petal",
       petalColor: "#f7c84a",
-      petalHighlight: "#ffe28a",
-      stemLength: 130,
+      petalHighlight: "#3a2a14",
+      stemLength: 118,
     };
   }
   if (game === "math") {
@@ -424,7 +439,7 @@ export function pickerMeta(game: LobbyGame): {
     flower: "daisy",
     petalColor: "#f8f4ec",
     petalHighlight: "#c8b8a4",
-    stemLength: 112,
+    stemLength: 130,
   };
 }
 

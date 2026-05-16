@@ -14,6 +14,7 @@ import FullscreenButton from "../components/FullscreenButton";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import LilyFlower from "../components/LilyFlower";
 import DaisyFlower from "../components/DaisyFlower";
+import PetalFlower from "../components/PetalFlower";
 import ThemeToggle from "../components/ThemeToggle";
 import type {
   LobbyGame,
@@ -234,27 +235,45 @@ function DisplayFlower({
       {meta.emoji}
     </text>
   );
+  let flower: React.ReactNode;
+  if (meta.flower === "lily") {
+    flower = (
+      <LilyFlower
+        petalColor={meta.petalColor}
+        petalHighlight={meta.petalHighlight}
+        stemLength={meta.stemLength}
+        scale={1.6}
+        swayKeyframes={swayKeyframes}
+        centerContent={centerContent}
+      />
+    );
+  } else if (meta.flower === "daisy") {
+    flower = (
+      <DaisyFlower
+        petalColor={meta.petalColor}
+        petalEdge={meta.petalHighlight}
+        stemLength={meta.stemLength}
+        scale={1.6}
+        swayKeyframes={swayKeyframes}
+        centerContent={centerContent}
+      />
+    );
+  } else {
+    // petal — WordHive's original 5-round-petal flower at TV scale.
+    flower = (
+      <PetalFlower
+        petalColor={meta.petalColor}
+        petalEdge={meta.petalHighlight}
+        stemLength={meta.stemLength}
+        scale={1.6}
+        swayKeyframes={swayKeyframes}
+        centerContent={centerContent}
+      />
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      {meta.flower === "lily" ? (
-        <LilyFlower
-          petalColor={meta.petalColor}
-          petalHighlight={meta.petalHighlight}
-          stemLength={meta.stemLength}
-          scale={1.6}
-          swayKeyframes={swayKeyframes}
-          centerContent={centerContent}
-        />
-      ) : (
-        <DaisyFlower
-          petalColor={meta.petalColor}
-          petalEdge={meta.petalHighlight}
-          stemLength={meta.stemLength}
-          scale={1.6}
-          swayKeyframes={swayKeyframes}
-          centerContent={centerContent}
-        />
-      )}
+      {flower}
       <div style={{ fontSize: 28, fontWeight: 700, color: "var(--fg)", marginTop: 8 }}>
         {meta.label}
       </div>
@@ -265,7 +284,7 @@ function DisplayFlower({
 function displayMeta(game: LobbyGame): {
   label: string;
   emoji: string;
-  flower: "lily" | "daisy";
+  flower: "lily" | "daisy" | "petal";
   petalColor: string;
   petalHighlight: string;
   stemLength: number;
@@ -274,10 +293,10 @@ function displayMeta(game: LobbyGame): {
     return {
       label: "WordHive",
       emoji: "🐝",
-      flower: "lily",
+      flower: "petal",
       petalColor: "#f7c84a",
-      petalHighlight: "#ffe28a",
-      stemLength: 240,
+      petalHighlight: "#3a2a14",
+      stemLength: 220,
     };
   }
   if (game === "math") {
@@ -296,6 +315,6 @@ function displayMeta(game: LobbyGame): {
     flower: "daisy",
     petalColor: "#f8f4ec",
     petalHighlight: "#c8b8a4",
-    stemLength: 205,
+    stemLength: 240,
   };
 }
