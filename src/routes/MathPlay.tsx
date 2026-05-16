@@ -17,6 +17,7 @@ import { getClientId } from "../lib/clientId";
 import { sounds } from "../lib/sounds";
 import { randomName } from "../lib/randomName";
 import { AVATARS, randomAvatar } from "../lib/avatars";
+import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import Avatar from "../components/Avatar";
 import Timer from "../components/Timer";
 import PausedOverlay from "../components/PausedOverlay";
@@ -61,6 +62,10 @@ function useMathRoomSocket(roomCode: string, role: "host" | "player") {
     | { targetId: string; ok: boolean; reason?: string; points?: number; allSix?: boolean; solveMs?: number; at: number }
     | null
   >(null);
+  // Increments on every (re)connect. Player route watches this to
+  // re-send `join` after a socket drop — without that the new
+  // connection has no clientId mapping on the server and taps no-op.
+  const [connectionEpoch, setConnectionEpoch] = useState(0);
   const socketRef = useRef<PartySocket | null>(null);
 
   useEffect(() => {
@@ -96,10 +101,13 @@ function useMathRoomSocket(roomCode: string, role: "host" | "player") {
           break;
       }
     };
+    const onOpen = () => setConnectionEpoch((e) => e + 1);
     socket.addEventListener("message", onMsg);
+    socket.addEventListener("open", onOpen);
     socketRef.current = socket;
     return () => {
       socket.removeEventListener("message", onMsg);
+      socket.removeEventListener("open", onOpen);
       socket.close();
       socketRef.current = null;
     };
@@ -108,16 +116,14 @@ function useMathRoomSocket(roomCode: string, role: "host" | "player") {
   const send = (msg: MathClientMessage) => {
     socketRef.current?.send(JSON.stringify(msg));
   };
-  return { state, privateState, lastSolveResult, switchAt, send };
+  return { state, privateState, lastSolveResult, switchAt, send, connectionEpoch };
 }
 
 export default function MathPlay() {
   const { room } = useParams<{ room: string }>();
   const roomCode = (room ?? "").toUpperCase();
-  const { state, privateState, lastSolveResult, send, switchAt } = useMathRoomSocket(
-    roomCode,
-    "player",
-  );
+  const { state, privateState, lastSolveResult, send, switchAt, connectionEpoch } =
+    useMathRoomSocket(roomCode, "player");
   const nav = useNavigate();
   useEffect(() => {
     if (switchAt) nav(`/play/${roomCode}?reset=1`, { replace: true });
@@ -152,6 +158,18 @@ export default function MathPlay() {
     }
   }, [state, joined, clientId]);
 
+  // Reconnect handler — re-send join on every socket re-open so the
+  // server reassociates the new connection with our clientId. Without
+  // this, taps after a reconnect (phone lock, network blip) silently
+  // do nothing on the server and the player has to pause + reload.
+  useEffect(() => {
+    if (connectionEpoch <= 1) return;
+    const savedName = localStorage.getItem(NAME_KEY);
+    if (!savedName || !clientId) return;
+    const savedAvatar = localStorage.getItem(AVATAR_KEY) ?? "fox";
+    send({ type: "join", name: savedName, avatar: savedAvatar, clientId });
+  }, [connectionEpoch]);
+
   if (!state) {
     return (
       <>
@@ -175,7 +193,10 @@ export default function MathPlay() {
           setName={setName}
           avatar={avatar}
           setAvatar={setAvatar}
-          onJoin={() => join(name, avatar)}
+          onJoin={() => {
+            requestFullscreenIfMobile();
+            join(name, avatar);
+          }}
         />
       </>
     );

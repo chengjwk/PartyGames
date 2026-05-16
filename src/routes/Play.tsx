@@ -5,6 +5,7 @@ import { getClientId } from "../lib/clientId";
 import { sounds } from "../lib/sounds";
 import { randomName } from "../lib/randomName";
 import { AVATARS, randomAvatar } from "../lib/avatars";
+import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import Honeycomb from "../components/Honeycomb";
 import Timer from "../components/Timer";
 import PausedOverlay from "../components/PausedOverlay";
@@ -28,7 +29,8 @@ const AVATAR_KEY = "wordhive.avatar";
 export default function Play() {
   const { room } = useParams<{ room: string }>();
   const roomCode = (room ?? "").toUpperCase();
-  const { state, privateState, lastSubmit, send, switchAt } = useRoomSocket(roomCode, "player");
+  const { state, privateState, lastSubmit, send, switchAt, connectionEpoch } =
+    useRoomSocket(roomCode, "player");
   const nav = useNavigate();
   useEffect(() => {
     if (switchAt) nav(`/play/${roomCode}?reset=1`, { replace: true });
@@ -67,6 +69,22 @@ export default function Play() {
     }
   }, [state, joined, clientId]);
 
+  // Reconnect handler: when the socket reconnects after a drop (phone
+  // lock, network blip, etc.), the new connection has no clientId
+  // mapping on the server — so taps would silently no-op. Re-send our
+  // join so the server re-associates this connection with our identity.
+  // The server's join handler is idempotent for known clientIds.
+  useEffect(() => {
+    // connectionEpoch === 1 is the initial connect; the autoJoin effect
+    // above handles that case once state arrives. From the 2nd open
+    // onward, this is a reconnect.
+    if (connectionEpoch <= 1) return;
+    const savedName = localStorage.getItem(NAME_KEY);
+    if (!savedName || !clientId) return;
+    const savedAvatar = localStorage.getItem(AVATAR_KEY) ?? "fox";
+    send({ type: "join", name: savedName, avatar: savedAvatar, clientId });
+  }, [connectionEpoch]);
+
   if (!state) {
     return (
       <>
@@ -87,7 +105,11 @@ export default function Play() {
           setName={setName}
           avatar={avatar}
           setAvatar={setAvatar}
-          onJoin={() => join(name, avatar)}
+          onJoin={() => {
+            // Must be in a user-gesture stack for the browser to allow it.
+            requestFullscreenIfMobile();
+            join(name, avatar);
+          }}
         />
       </>
     );

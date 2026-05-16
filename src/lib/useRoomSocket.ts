@@ -24,6 +24,12 @@ export interface RoomSocket {
   lastSubmit: SubmitFeedback | null;
   switchAt: number | null; // epoch ms when the server told us to navigate back to the lobby picker
   send: (msg: ClientMessage) => void;
+  // Increments on every PartySocket "open" event — i.e., the initial
+  // connect AND every subsequent auto-reconnect after a drop. Player
+  // routes watch this so they can re-send their `join` message on
+  // reconnect; without that, the server has no clientId mapping for the
+  // new connection and silently ignores subsequent taps.
+  connectionEpoch: number;
 }
 
 export function useRoomSocket(
@@ -35,6 +41,7 @@ export function useRoomSocket(
   const [privateState, setPrivateState] = useState<PrivatePlayerState | null>(null);
   const [lastSubmit, setLastSubmit] = useState<SubmitFeedback | null>(null);
   const [switchAt, setSwitchAt] = useState<number | null>(null);
+  const [connectionEpoch, setConnectionEpoch] = useState(0);
   const socketRef = useRef<PartySocket | null>(null);
 
   useEffect(() => {
@@ -70,10 +77,13 @@ export function useRoomSocket(
           break;
       }
     };
+    const onOpen = () => setConnectionEpoch((e) => e + 1);
     socket.addEventListener("message", onMsg);
+    socket.addEventListener("open", onOpen);
     socketRef.current = socket;
     return () => {
       socket.removeEventListener("message", onMsg);
+      socket.removeEventListener("open", onOpen);
       socket.close();
       socketRef.current = null;
     };
@@ -83,5 +93,5 @@ export function useRoomSocket(
     socketRef.current?.send(JSON.stringify(msg));
   };
 
-  return { state, privateState, lastSubmit, switchAt, send };
+  return { state, privateState, lastSubmit, switchAt, send, connectionEpoch };
 }

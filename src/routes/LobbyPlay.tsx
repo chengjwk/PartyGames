@@ -15,6 +15,7 @@ import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import LilyFlower from "../components/LilyFlower";
+import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import type {
   LobbyClientMessage,
   LobbyGame,
@@ -33,6 +34,7 @@ export default function LobbyPlay() {
   const nav = useNavigate();
 
   const [state, setState] = useState<LobbyState | null>(null);
+  const [connectionEpoch, setConnectionEpoch] = useState(0);
   const socketRef = useRef<PartySocket | null>(null);
   const [clientId] = useState(getClientId);
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? randomName());
@@ -55,10 +57,13 @@ export default function LobbyPlay() {
       const msg = JSON.parse(e.data) as LobbyServerMessage;
       if (msg.type === "state") setState(msg.state);
     };
+    const onOpen = () => setConnectionEpoch((e) => e + 1);
     socket.addEventListener("message", onMsg);
+    socket.addEventListener("open", onOpen);
     socketRef.current = socket;
     return () => {
       socket.removeEventListener("message", onMsg);
+      socket.removeEventListener("open", onOpen);
       socket.close();
     };
   }, [roomCode]);
@@ -85,6 +90,18 @@ export default function LobbyPlay() {
       join(existing.name, existing.avatar);
     }
   }, [state, joined, clientId]);
+
+  // Reconnect handler — re-send join on every socket re-open so the
+  // server reassociates the new connection with our clientId. Otherwise
+  // taps (e.g., pickGame) silently no-op after a phone-lock or network
+  // blip until the page is reloaded.
+  useEffect(() => {
+    if (connectionEpoch <= 1) return;
+    const savedName = localStorage.getItem(NAME_KEY);
+    if (!savedName || !clientId) return;
+    const savedAvatar = localStorage.getItem(AVATAR_KEY) ?? "fox";
+    send({ type: "join", name: savedName, avatar: savedAvatar, clientId });
+  }, [connectionEpoch]);
 
   // Coming back from a running game with ?reset=1: clear the lobby's
   // chosenGame so we land on the picker rather than auto-bouncing back.
@@ -131,7 +148,11 @@ export default function LobbyPlay() {
           setName={setName}
           avatar={avatar}
           setAvatar={setAvatar}
-          onJoin={() => join(name, avatar)}
+          onJoin={() => {
+            // Must be in a user-gesture stack for the browser to allow it.
+            requestFullscreenIfMobile();
+            join(name, avatar);
+          }}
         />
       </>
     );
