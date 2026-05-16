@@ -381,14 +381,27 @@ function Lobby({
         Players <span style={{ color: "var(--muted)" }}>({state.players.length})</span>
       </h2>
       <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
-        {state.players.map((p) => (
-          <PlayerRow
-            key={p.id}
-            player={p}
-            isHostBadge={state.hostPlayerId === p.id}
-            isMe={p.id === clientId}
-          />
-        ))}
+        {state.players.map((p) => {
+          const effDiff = (p.mathDifficulty ?? cfg.mathDifficulty) as MathDifficulty;
+          return (
+            <PlayerRow
+              key={p.id}
+              player={p}
+              isHostBadge={state.hostPlayerId === p.id}
+              isMe={p.id === clientId}
+              effectiveDifficulty={effDiff}
+              hasOverride={!!p.mathDifficulty}
+              canSetDifficulty={isHost}
+              onSetDifficulty={(d) =>
+                send({
+                  type: "setPlayerMathDifficulty",
+                  playerId: p.id,
+                  difficulty: d,
+                })
+              }
+            />
+          );
+        })}
       </ul>
       {isHost ? (
         <>
@@ -469,10 +482,20 @@ function PlayerRow({
   player,
   isHostBadge,
   isMe,
+  effectiveDifficulty,
+  hasOverride,
+  canSetDifficulty,
+  onSetDifficulty,
 }: {
   player: Player;
   isHostBadge: boolean;
   isMe: boolean;
+  effectiveDifficulty: MathDifficulty;
+  // True if this row has a per-player override (so we can show a
+  // "clear override" affordance).
+  hasOverride: boolean;
+  canSetDifficulty: boolean;
+  onSetDifficulty: (d: MathDifficulty | null) => void;
 }) {
   return (
     <li style={{
@@ -483,9 +506,10 @@ function PlayerRow({
       alignItems: "center",
       gap: 10,
       opacity: player.connected ? 1 : 0.4,
+      flexWrap: "wrap",
     }}>
       <Avatar id={player.avatar} size={36} />
-      <span style={{ flex: 1 }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
         {player.name}
         {isMe && <span style={{ color: "var(--muted)", marginLeft: 6, fontSize: 13 }}>(you)</span>}
         {isHostBadge && (
@@ -494,7 +518,79 @@ function PlayerRow({
           </span>
         )}
       </span>
+      {canSetDifficulty ? (
+        <PerPlayerDifficultyPicker
+          value={effectiveDifficulty}
+          overridden={hasOverride}
+          onChange={(d) => onSetDifficulty(d)}
+        />
+      ) : (
+        <span
+          style={{
+            fontSize: 11,
+            padding: "2px 6px",
+            borderRadius: 4,
+            background: "var(--bg)",
+            border: "1px solid var(--border)",
+            color: "var(--muted)",
+            textTransform: "uppercase",
+          }}
+        >
+          {effectiveDifficulty}
+        </span>
+      )}
     </li>
+  );
+}
+
+// Tiny inline difficulty picker for the host to set per-player
+// overrides. Tapping the same difficulty twice clears the override
+// (reverts to room default).
+function PerPlayerDifficultyPicker({
+  value,
+  overridden,
+  onChange,
+}: {
+  value: MathDifficulty;
+  overridden: boolean;
+  onChange: (d: MathDifficulty | null) => void;
+}) {
+  const opts: { id: MathDifficulty; label: string }[] = [
+    { id: "easy", label: "E" },
+    { id: "medium", label: "M" },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 3 }}>
+      {opts.map((o) => {
+        const active = value === o.id;
+        return (
+          <button
+            key={o.id}
+            onClick={() => onChange(active && overridden ? null : o.id)}
+            title={
+              active
+                ? overridden
+                  ? `Clear override (back to room default)`
+                  : `Already on ${o.label === "E" ? "Easy" : "Medium"}`
+                : `Set this player to ${o.label === "E" ? "Easy" : "Medium"}`
+            }
+            style={{
+              width: 26,
+              height: 22,
+              padding: 0,
+              fontSize: 11,
+              fontWeight: 700,
+              background: active ? ACCENT : "var(--bg)",
+              color: active ? ACCENT_FG : "var(--fg)",
+              border: overridden && active ? "1.5px solid var(--fg)" : "1px solid var(--border)",
+              borderRadius: 5,
+            }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -610,22 +706,30 @@ function combineTiles(
   idCounter: { current: number },
   derivedSlot: number,
 ): DerivedTile | { error: string } {
+  // Treat − and ÷ as commutative-with-swap: tile order doesn't matter,
+  // and we auto-orient so subtraction yields a non-negative result and
+  // division puts the larger value over the smaller. Verifier on the
+  // server applies the same semantics — the step's recorded left/right
+  // are the original tap order; both ends evaluate identically.
   let v: number;
   switch (op) {
     case "+":
       v = left.value + right.value;
       break;
     case "-":
-      v = left.value - right.value;
+      v = Math.abs(left.value - right.value);
       break;
     case "*":
       v = left.value * right.value;
       break;
-    case "/":
-      if (right.value === 0) return { error: "÷ by 0" };
-      if (left.value % right.value !== 0) return { error: "not whole" };
-      v = left.value / right.value;
+    case "/": {
+      const big = Math.max(left.value, right.value);
+      const small = Math.min(left.value, right.value);
+      if (small === 0) return { error: "÷ by 0" };
+      if (big % small !== 0) return { error: "not whole" };
+      v = big / small;
       break;
+    }
   }
   // Glue together the steps arrays.
   //   newSteps[0..leftLen-1] = left.steps (verbatim)
@@ -906,8 +1010,11 @@ function Round({
       ? coversAllPositions(claimable.steps, puzzle.digits.length)
       : false;
 
-  // Operator set: only show what's allowed for this difficulty.
-  const ops = puzzle.operators;
+  // Operator set: prefer the player's per-player allowed operators
+  // from private state (set per-player by the server based on
+  // difficulty handicap). Fall back to the public puzzle's ops if
+  // private state hasn't arrived yet on first paint.
+  const ops = privateState?.allowedOperators ?? puzzle.operators;
 
   const poolTiles = tiles.filter((t): t is PoolTile => t.kind === "pool");
   const derivedTiles = tiles.filter(

@@ -95,6 +95,14 @@ export interface MathPrivatePlayerState {
   scoreThisRound: number;
   solved: MathSolvedRecord[];
   skipped: MathSkippedRecord[];
+  // Operators this player is allowed to use. Derived from their
+  // effective difficulty (per-player override or room default).
+  // Phone uses this to decide which operator buttons to render.
+  allowedOperators: MathOperator[];
+  // The player's effective difficulty for this round. Surfaced so the
+  // phone can show a small badge ("playing Easy") and so the lobby UI
+  // reads back the current override consistently.
+  difficulty: MathDifficulty;
 }
 
 // One binary-op step in the player's solution tree. Operands reference
@@ -125,7 +133,10 @@ export type MathClientMessage =
   | { type: "togglePause" }
   | { type: "resetGame" }
   | { type: "switchGames" }
-  | { type: "transferHost"; playerId: string };
+  | { type: "transferHost"; playerId: string }
+  // Host sets a per-player MathHive difficulty override. Pass null to
+  // clear (revert to room default).
+  | { type: "setPlayerMathDifficulty"; playerId: string; difficulty: MathDifficulty | null };
 
 export type MathSolveReason =
   | "wrong_target"

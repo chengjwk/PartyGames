@@ -35,9 +35,11 @@ import {
   TARGET_FLOOR_POINTS,
   TARGET_TIME_BUDGET_MS,
   buildTargetCandidates,
-  generateMathPuzzle,
+  generateMathPuzzleSet,
+  operatorsForDifficulty,
   type MathPuzzle,
 } from "./mathhive-puzzle";
+import type { MathDifficulty } from "../src/shared/math-types";
 import { scoreSolve, verifySolve } from "./mathhive-scoring";
 
 const COUNTDOWN_MS = 3000;
@@ -45,8 +47,13 @@ const PAUSE_GRACE_MS = 3000;
 
 interface PerPlayerRoundState {
   currentTarget: MathTargetPublic | null;
-  // Index into puzzle.targetCandidates we'll draw from next. Wraps around
-  // if a fast solver burns through the deck.
+  // The player's effective difficulty for this round (captured at
+  // round start from their override or the room default). Drives
+  // which candidate list they pull from and which operators they
+  // can use.
+  difficulty: MathDifficulty;
+  // Index into this difficulty's candidate list we'll draw from next.
+  // Wraps around if a fast solver burns through the deck.
   cursor: number;
   // Last target value handed out — used to avoid back-to-back duplicates
   // for a single player.
@@ -70,8 +77,13 @@ export default class MathHiveServer implements Party.Server {
   private hostPlayerId: string | null = null;
   private totalScores = new Map<string, number>();
 
-  private puzzle: MathPuzzle | null = null;
-  private targetCandidates: number[] = [];
+  // Shared digit pool for the round (length 6).
+  private digits: string[] = [];
+  // One puzzle per difficulty in use this round. All share `digits`
+  // but differ in operator sets + reachable maps.
+  private puzzlesByDifficulty = new Map<MathDifficulty, MathPuzzle>();
+  // Per-difficulty target-candidate decks for the round.
+  private candidatesByDifficulty = new Map<MathDifficulty, number[]>();
   private perPlayer = new Map<string, PerPlayerRoundState>();
   // Records across the whole game per player (for FINAL_RESULTS top-solves).
   private allSolvesByPlayer = new Map<string, MathSolvedRecord[]>();
@@ -136,6 +148,9 @@ export default class MathHiveServer implements Party.Server {
         return;
       case "setHandicap":
         if (this.isHost(sender)) this.handleSetHandicap(msg);
+        return;
+      case "setPlayerMathDifficulty":
+        if (this.isHost(sender)) this.handleSetPlayerMathDifficulty(msg);
         return;
       case "configure":
         if (this.isHost(sender)) this.handleConfigure(msg);
@@ -228,7 +243,7 @@ export default class MathHiveServer implements Party.Server {
     if (this.phase === "ROUND_PLAYING") {
       const st = this.perPlayer.get(msg.clientId);
       if (!st) {
-        this.perPlayer.set(msg.clientId, this.makeInitialPlayerState());
+        this.perPlayer.set(msg.clientId, this.makeInitialPlayerState(msg.clientId));
       }
       const cur = this.perPlayer.get(msg.clientId)!;
       if (!cur.currentTarget) this.dealNextTarget(msg.clientId);
@@ -263,6 +278,28 @@ export default class MathHiveServer implements Party.Server {
     if (!p) return;
     p.scoreMultiplier = Math.max(1, Math.min(3, msg.multiplier || 1));
     this.broadcastState();
+  }
+
+  // Host-only: set or clear a per-player MathHive difficulty override.
+  // Takes effect at the start of the NEXT round (we don't reshuffle
+  // mid-round targets to avoid disorienting the player).
+  private handleSetPlayerMathDifficulty(msg: {
+    playerId: string;
+    difficulty: MathDifficulty | null;
+  }) {
+    const p = this.players.get(msg.playerId);
+    if (!p) return;
+    if (msg.difficulty === null) {
+      p.mathDifficulty = undefined;
+    } else if (
+      msg.difficulty === "easy" ||
+      msg.difficulty === "medium" ||
+      msg.difficulty === "hard"
+    ) {
+      p.mathDifficulty = msg.difficulty;
+    }
+    this.broadcastState();
+    this.broadcastAllPrivate();
   }
 
   private handleConfigure(msg: { config: Partial<RoundConfig> }) {
@@ -306,13 +343,31 @@ export default class MathHiveServer implements Party.Server {
     this.beginCountdown();
   }
 
+  // Returns a player's effective difficulty: their per-player override
+  // if set, else the room default. Stable across the round once
+  // captured in PerPlayerRoundState.
+  private effectiveDifficulty(playerId: string): MathDifficulty {
+    const p = this.players.get(playerId);
+    return p?.mathDifficulty ?? this.config.mathDifficulty;
+  }
+
   private beginCountdown() {
     this.currentRound += 1;
-    this.puzzle = generateMathPuzzle(this.config.mathDifficulty);
-    this.targetCandidates = buildTargetCandidates(this.puzzle);
+    // Collect the set of difficulties actually in use this round.
+    const needed = new Set<MathDifficulty>([this.config.mathDifficulty]);
+    for (const p of this.players.values()) {
+      if (p.connected) needed.add(this.effectiveDifficulty(p.id));
+    }
+    const set = generateMathPuzzleSet([...needed]);
+    this.digits = set.digits;
+    this.puzzlesByDifficulty = set.perDifficulty;
+    this.candidatesByDifficulty.clear();
+    for (const [diff, puzzle] of this.puzzlesByDifficulty) {
+      this.candidatesByDifficulty.set(diff, buildTargetCandidates(puzzle));
+    }
     this.perPlayer.clear();
     for (const cid of this.players.keys()) {
-      this.perPlayer.set(cid, this.makeInitialPlayerState());
+      this.perPlayer.set(cid, this.makeInitialPlayerState(cid));
     }
     this.roundSummary = null;
     this.roundEndsAt = null;
@@ -339,7 +394,7 @@ export default class MathHiveServer implements Party.Server {
   }
 
   private endRound() {
-    if (this.phase !== "ROUND_PLAYING" || !this.puzzle) return;
+    if (this.phase !== "ROUND_PLAYING" || this.digits.length === 0) return;
     if (this.roundTimer) {
       clearTimeout(this.roundTimer);
       this.roundTimer = null;
@@ -379,9 +434,17 @@ export default class MathHiveServer implements Party.Server {
         }
       }
     }
+    // Summary uses the room-default difficulty's operator set for
+    // display. Per-player allowed operators are still available via
+    // each player's private state.
+    const defaultPuzzle = this.puzzlesByDifficulty.get(
+      this.config.mathDifficulty,
+    );
+    const summaryOps =
+      defaultPuzzle?.operators ?? operatorsForDifficulty(this.config.mathDifficulty);
     this.roundSummary = {
-      digits: this.puzzle.digits,
-      operators: this.puzzle.operators,
+      digits: this.digits,
+      operators: summaryOps,
       perPlayer,
     };
     this.roundEndsAt = null;
@@ -404,8 +467,9 @@ export default class MathHiveServer implements Party.Server {
     this.phase = "LOBBY";
     this.currentRound = 0;
     this.totalScores.clear();
-    this.puzzle = null;
-    this.targetCandidates = [];
+    this.digits = [];
+    this.puzzlesByDifficulty.clear();
+    this.candidatesByDifficulty.clear();
     this.perPlayer.clear();
     this.roundSummary = null;
     this.roundStartsAt = null;
@@ -429,7 +493,7 @@ export default class MathHiveServer implements Party.Server {
   ) {
     const cid = this.connToClient.get(sender.id);
     if (!cid) return;
-    if (this.phase !== "ROUND_PLAYING" || !this.puzzle || this.paused) {
+    if (this.phase !== "ROUND_PLAYING" || this.digits.length === 0 || this.paused) {
       this.send(sender, {
         type: "solveResult",
         targetId: msg.targetId,
@@ -449,9 +513,11 @@ export default class MathHiveServer implements Party.Server {
       return;
     }
     const target = st.currentTarget;
+    const playerPuzzle = this.puzzlesByDifficulty.get(st.difficulty);
     const verdict = verifySolve({
-      poolDigits: this.puzzle.digits,
-      allowedOperators: this.puzzle.operators,
+      poolDigits: this.digits,
+      allowedOperators:
+        playerPuzzle?.operators ?? operatorsForDifficulty(st.difficulty),
       steps: msg.steps,
       target: target.value,
     });
@@ -501,7 +567,7 @@ export default class MathHiveServer implements Party.Server {
   private handleSkip(sender: Party.Connection, msg: { targetId: string }) {
     const cid = this.connToClient.get(sender.id);
     if (!cid) return;
-    if (this.phase !== "ROUND_PLAYING" || !this.puzzle || this.paused) return;
+    if (this.phase !== "ROUND_PLAYING" || this.digits.length === 0 || this.paused) return;
     const st = this.perPlayer.get(cid);
     if (!st || !st.currentTarget || st.currentTarget.id !== msg.targetId) {
       this.send(sender, { type: "skipResult", targetId: msg.targetId, ok: false });
@@ -516,10 +582,13 @@ export default class MathHiveServer implements Party.Server {
     this.broadcastState();
   }
 
-  private makeInitialPlayerState(): PerPlayerRoundState {
+  private makeInitialPlayerState(playerId: string): PerPlayerRoundState {
+    const diff = this.effectiveDifficulty(playerId);
+    const deck = this.candidatesByDifficulty.get(diff) ?? [];
     return {
       currentTarget: null,
-      cursor: Math.floor(Math.random() * Math.max(1, this.targetCandidates.length)),
+      difficulty: diff,
+      cursor: Math.floor(Math.random() * Math.max(1, deck.length)),
       lastValue: null,
       solved: [],
       skipped: [],
@@ -528,27 +597,30 @@ export default class MathHiveServer implements Party.Server {
   }
 
   private dealNextTarget(playerId: string) {
-    if (!this.puzzle) return;
     const st = this.perPlayer.get(playerId);
     if (!st) return;
-    if (this.targetCandidates.length === 0) {
+    const puzzle = this.puzzlesByDifficulty.get(st.difficulty);
+    const deck = this.candidatesByDifficulty.get(st.difficulty) ?? [];
+    if (!puzzle) return;
+    if (deck.length === 0) {
       // No candidates (extremely thin pool) — synthesize a fallback target.
       st.currentTarget = null;
       return;
     }
-    // Pick the next value, avoiding back-to-back duplicate for this player.
+    // Pick the next value from THIS player's difficulty's deck,
+    // avoiding back-to-back duplicates.
     let value: number | null = null;
-    for (let i = 0; i < this.targetCandidates.length; i++) {
-      const candidate = this.targetCandidates[st.cursor % this.targetCandidates.length];
+    for (let i = 0; i < deck.length; i++) {
+      const candidate = deck[st.cursor % deck.length];
       st.cursor++;
       if (candidate !== st.lastValue) {
         value = candidate;
         break;
       }
     }
-    if (value === null) value = this.targetCandidates[0];
+    if (value === null) value = deck[0];
     st.lastValue = value;
-    const info = this.puzzle.reachable.get(value);
+    const info = puzzle.reachable.get(value);
     const minOps = info ? Math.max(1, Math.min(5, info.minOps)) : 2;
     const basePoints =
       TARGET_BASE_POINTS[minOps] ?? TARGET_BASE_POINTS[2];
@@ -660,8 +732,9 @@ export default class MathHiveServer implements Party.Server {
     this.phase = "LOBBY";
     this.currentRound = 0;
     this.totalScores.clear();
-    this.puzzle = null;
-    this.targetCandidates = [];
+    this.digits = [];
+    this.puzzlesByDifficulty.clear();
+    this.candidatesByDifficulty.clear();
     this.perPlayer.clear();
     this.roundSummary = null;
     this.roundStartsAt = null;
@@ -717,6 +790,12 @@ export default class MathHiveServer implements Party.Server {
           .slice(0, 10);
       }
     }
+    // Public puzzle uses the room-default difficulty's operators for
+    // the TV display. Each phone receives its own operator set via
+    // its private state.
+    const defaultPuzzle = this.puzzlesByDifficulty.get(
+      this.config.mathDifficulty,
+    );
     return {
       phase: this.phase,
       config: this.config,
@@ -724,8 +803,13 @@ export default class MathHiveServer implements Party.Server {
       hostPlayerId: this.hostPlayerId,
       currentRound: this.currentRound,
       totalScores: Object.fromEntries(this.totalScores),
-      puzzle: this.puzzle
-        ? { digits: this.puzzle.digits, operators: this.puzzle.operators }
+      puzzle: this.digits.length === 6
+        ? {
+            digits: this.digits,
+            operators:
+              defaultPuzzle?.operators ??
+              operatorsForDifficulty(this.config.mathDifficulty),
+          }
         : null,
       roundStartsAt: this.roundStartsAt,
       roundEndsAt: this.roundEndsAt,
@@ -741,14 +825,29 @@ export default class MathHiveServer implements Party.Server {
 
   private privateFor(cid: string): MathPrivatePlayerState {
     const st = this.perPlayer.get(cid);
+    // When there's no round-state yet (LOBBY phase or never joined a
+    // round), surface the player's *current* effective difficulty + its
+    // operator set so the lobby UI can read it consistently.
     if (!st) {
-      return { currentTarget: null, scoreThisRound: 0, solved: [], skipped: [] };
+      const diff = this.effectiveDifficulty(cid);
+      return {
+        currentTarget: null,
+        scoreThisRound: 0,
+        solved: [],
+        skipped: [],
+        difficulty: diff,
+        allowedOperators: operatorsForDifficulty(diff),
+      };
     }
+    const puzzle = this.puzzlesByDifficulty.get(st.difficulty);
     return {
       currentTarget: st.currentTarget,
       scoreThisRound: st.scoreThisRound,
       solved: st.solved,
       skipped: st.skipped,
+      difficulty: st.difficulty,
+      allowedOperators:
+        puzzle?.operators ?? operatorsForDifficulty(st.difficulty),
     };
   }
 

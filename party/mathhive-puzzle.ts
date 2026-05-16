@@ -109,16 +109,21 @@ function enumerateStates(
                   candidates.push(valA + valB);
                   break;
                 case "-":
-                  candidates.push(valA - valB);
-                  candidates.push(valB - valA);
+                  // Commutative-with-swap: only |a-b| is reachable
+                  // (the verifier swaps to keep results ≥ 0).
+                  candidates.push(Math.abs(valA - valB));
                   break;
                 case "*":
                   candidates.push(valA * valB);
                   break;
-                case "/":
-                  if (valB !== 0 && valA % valB === 0) candidates.push(valA / valB);
-                  if (valA !== 0 && valB % valA === 0) candidates.push(valB / valA);
+                case "/": {
+                  // big/small only — same commutative-with-swap rule.
+                  const big = Math.max(valA, valB);
+                  const small = Math.min(valA, valB);
+                  if (small !== 0 && big % small === 0)
+                    candidates.push(big / small);
                   break;
+                }
               }
               const minOps = size - 1;
               for (const r of candidates) {
@@ -158,6 +163,69 @@ function aggregateReachable(
     }
   }
   return out;
+}
+
+// Build a set of puzzles that share the same 6-digit pool but differ
+// in operator sets per difficulty. Used when a single round has
+// players on mixed difficulties — we want every player's reachable
+// candidates to be authentic to their own allowed operators, but
+// the visible pool of digits is shared.
+export function generateMathPuzzleSet(
+  difficulties: MathDifficulty[],
+): { digits: string[]; perDifficulty: Map<MathDifficulty, MathPuzzle> } {
+  const uniq = new Set<MathDifficulty>(
+    difficulties.length > 0 ? difficulties : ["easy"],
+  );
+  // Always sanity-check against the broadest operator set in use so
+  // we don't pick a pool that's only easy-friendly when there are
+  // medium/hard players present.
+  const hasBroad = uniq.has("medium") || uniq.has("hard");
+  const sanityOps = hasBroad
+    ? operatorsForDifficulty("medium")
+    : operatorsForDifficulty("easy");
+  const allDigits = "123456789".split("");
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const pool = [...allDigits];
+    const digits: string[] = [];
+    while (digits.length < POOL_SIZE && pool.length > 0) {
+      const d = weightedDrawFromPool(pool);
+      digits.push(d);
+      pool.splice(pool.indexOf(d), 1);
+    }
+    if (digits.length < POOL_SIZE) continue;
+    const dn = digits.map((d) => Number(d));
+    // Quick sanity check using the broadest ops.
+    const sStates = enumerateStates(dn, sanityOps);
+    const sReach = aggregateReachable(sStates, (1 << POOL_SIZE) - 1);
+    let goodCount = 0;
+    for (const [v, info] of sReach) {
+      if (v >= 10 && v <= 100 && info.minOps >= 2) goodCount++;
+    }
+    if (goodCount < 10) continue;
+    // Pool is good — build a puzzle per requested difficulty.
+    const perDifficulty = new Map<MathDifficulty, MathPuzzle>();
+    for (const diff of uniq) {
+      const ops = operatorsForDifficulty(diff);
+      const states = enumerateStates(dn, ops);
+      const reachable = aggregateReachable(states, (1 << POOL_SIZE) - 1);
+      perDifficulty.set(diff, { digits, operators: ops, reachable });
+    }
+    return { digits, perDifficulty };
+  }
+  // Fallback — deterministic pool to avoid hangs on pathological RNG.
+  const digits = ["1", "2", "3", "4", "5", "6"];
+  const dn = digits.map(Number);
+  const perDifficulty = new Map<MathDifficulty, MathPuzzle>();
+  for (const diff of uniq) {
+    const ops = operatorsForDifficulty(diff);
+    const states = enumerateStates(dn, ops);
+    perDifficulty.set(diff, {
+      digits,
+      operators: ops,
+      reachable: aggregateReachable(states, (1 << POOL_SIZE) - 1),
+    });
+  }
+  return { digits, perDifficulty };
 }
 
 export function generateMathPuzzle(difficulty: MathDifficulty): MathPuzzle {

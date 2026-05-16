@@ -13,6 +13,11 @@ export interface Player {
   avatar: string; // emoji from AVATARS
   scoreMultiplier: number; // 1 = no handicap; 1.25 / 1.5 / 2 give younger players a boost
   connected: boolean;
+  // MathHive-only per-player difficulty override. When set, this player
+  // plays MathHive at this difficulty regardless of the room default.
+  // Other games ignore this field. Undefined = inherit room default
+  // (state.config.mathDifficulty).
+  mathDifficulty?: MathDifficulty;
 }
 
 export type GameMode = "classic" | "swarm";

@@ -14,12 +14,17 @@ interface BuiltHiveProps {
   hexCount: number;
 }
 
-// Visual parameters.
-const HEX_R = 6;
+// Visual parameters. Sized so the hive is a fat strip across the
+// whole bottom of the screen rather than a thin decorative ribbon.
+// HEX_R is in SVG units; the SVG scales to fill its CSS box so the
+// visible pixel size grows with the device.
+const HEX_R = 12;
 const HW = HEX_R * Math.sqrt(3);
 const ROW_DY = 1.5 * HEX_R;
-const HEXES_PER_ROW = 18;
-const VIEW_HEIGHT = 60;
+const HEXES_PER_ROW = 10;
+// Height of the hive strip — `min(35vh, 240px)` so on tall phones it
+// occupies the bottom third without dominating short landscape screens.
+const HIVE_HEIGHT_CSS = "min(35vh, 240px)";
 // Each worker bee's full flight (entry → hover → exit) duration.
 const WORKER_DURATION_MS = 1500;
 // Stagger between workers spawned in the same batch — so a multi-digit
@@ -123,9 +128,15 @@ export default function BuiltHive({ hexCount }: BuiltHiveProps) {
   return (
     <div
       style={{
-        height: VIEW_HEIGHT,
+        height: HIVE_HEIGHT_CSS,
         position: "relative",
-        marginTop: 4,
+        // Break out of the parent main's horizontal padding so the
+        // hive fills the entire bottom of the screen edge-to-edge.
+        // The parent <main> uses 20px horizontal padding; we offset
+        // by the same amount on either side.
+        marginLeft: -20,
+        marginRight: -20,
+        marginTop: 8,
         overflow: "hidden",
       }}
     >
@@ -143,7 +154,7 @@ export default function BuiltHive({ hexCount }: BuiltHiveProps) {
       <svg
         viewBox={`0 ${-totalHeight + HEX_R} ${totalWidth} ${totalHeight}`}
         width="100%"
-        height={VIEW_HEIGHT}
+        height="100%"
         preserveAspectRatio="xMidYMax meet"
         style={{ display: "block", overflow: "visible" }}
       >

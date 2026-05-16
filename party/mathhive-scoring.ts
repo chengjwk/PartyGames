@@ -80,22 +80,28 @@ export function verifySolve(args: {
     // is correct, but defense-in-depth never hurts.
     if ((lTile.mask & rTile.mask) !== 0) return { ok: false, reason: "invalid_steps" };
 
+    // − and ÷ are commutative-with-swap on this server (matches the
+    // client's combineTiles). Tile order doesn't matter; we always
+    // subtract smaller from larger and divide larger by smaller.
     let v: number;
     switch (step.operator) {
       case "+":
         v = lTile.value + rTile.value;
         break;
       case "-":
-        v = lTile.value - rTile.value;
+        v = Math.abs(lTile.value - rTile.value);
         break;
       case "*":
         v = lTile.value * rTile.value;
         break;
-      case "/":
-        if (rTile.value === 0) return { ok: false, reason: "div_by_zero" };
-        if (lTile.value % rTile.value !== 0) return { ok: false, reason: "div_non_integer" };
-        v = lTile.value / rTile.value;
+      case "/": {
+        const big = Math.max(lTile.value, rTile.value);
+        const small = Math.min(lTile.value, rTile.value);
+        if (small === 0) return { ok: false, reason: "div_by_zero" };
+        if (big % small !== 0) return { ok: false, reason: "div_non_integer" };
+        v = big / small;
         break;
+      }
     }
     if (!Number.isFinite(v)) return { ok: false, reason: "invalid_steps" };
 
