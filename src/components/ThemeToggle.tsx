@@ -7,11 +7,12 @@ import { useTheme } from "../lib/theme";
 export default function ThemeToggle({
   size = 18,
   top = 12,
-  right = 96,
+  // Sits to the LEFT of the FullscreenButton (which lives at right: 12).
+  // The FS button's "⤢ fullscreen" / "⤡ exit" labels are wider than a
+  // single icon, so we leave ~150px of clearance.
+  right = 156,
 }: {
   size?: number;
-  // Absolute-positioned in the top-right by default. Caller can adjust
-  // so it sits beside the FullscreenButton without overlapping.
   top?: number;
   right?: number;
 }) {
