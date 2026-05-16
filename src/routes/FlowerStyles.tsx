@@ -1,26 +1,116 @@
-// Design preview route — shows several flower-style variants
-// side-by-side so we can pick which one to roll out across the
-// three lobby slots. Not linked from anywhere in production; visit
-// /flower-styles in dev to compare.
+// Design preview route — bold-cartoon flower lineup for picking
+// which species goes in each lobby slot. Each card shows the same
+// flower in three palettes (gold / royal blue / white-ish) so you
+// can see how the species reads at WordHive / MathHive / Pollinart
+// color treatments. Not linked from anywhere in production.
 
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import ThemeToggle from "../components/ThemeToggle";
-import PetalFlowerCurrent from "../components/PetalFlower";
 import PetalFlowerBold from "../components/styles/PetalFlowerBold";
-import PetalFlowerPainterly from "../components/styles/PetalFlowerPainterly";
-import PetalFlowerSunflower from "../components/styles/PetalFlowerSunflower";
-import PetalFlowerGeometric from "../components/styles/PetalFlowerGeometric";
+import SunflowerBold from "../components/styles/SunflowerBold";
+import TulipBold from "../components/styles/TulipBold";
+import PoppyBold from "../components/styles/PoppyBold";
+import DaffodilBold from "../components/styles/DaffodilBold";
+import CherryBlossomBold from "../components/styles/CherryBlossomBold";
 
-const COLOR = "#f5a300"; // deeper saturated gold (less pastel than #f7c84a)
-const EDGE = "#3a2a14";
+const EDGE = "#1a1006";
+
+// Three palettes, matching the production lobby flowers so you can
+// preview each species in each game's color.
+const PALETTES: Array<{ name: string; petal: string }> = [
+  { name: "Honey gold (WordHive)", petal: "#f5a300" },
+  { name: "Royal blue (MathHive)", petal: "#3a76db" },
+  { name: "Soft white (Pollinart)", petal: "#fafaf2" },
+];
+
+type FlowerKind =
+  | "petal"
+  | "sunflower"
+  | "tulip"
+  | "poppy"
+  | "daffodil"
+  | "cherryblossom";
+
+const SPECIES: Array<{
+  key: FlowerKind;
+  label: string;
+  blurb: string;
+}> = [
+  {
+    key: "petal",
+    label: "5-petal (current bold cartoon)",
+    blurb:
+      "The simple round-petal silhouette in bold-cartoon treatment. Tidy and unambiguous.",
+  },
+  {
+    key: "sunflower",
+    label: "Sunflower",
+    blurb:
+      "Fat seedy disc + 14 chunky petals, all in bold cartoon. Biggest, most generous silhouette.",
+  },
+  {
+    key: "tulip",
+    label: "Tulip",
+    blurb:
+      "Three overlapping cup-petals on a tall stem with sword leaves. Reads as a classic spring tulip.",
+  },
+  {
+    key: "poppy",
+    label: "Poppy",
+    blurb:
+      "Five wide crinkled petals around a dark seed pod with stamen dots. Papery, slightly wild.",
+  },
+  {
+    key: "daffodil",
+    label: "Daffodil",
+    blurb:
+      "Six pointed star petals behind a trumpet corona. Unmistakable daffodil profile.",
+  },
+  {
+    key: "cherryblossom",
+    label: "Cherry blossom",
+    blurb:
+      "Five notched petals with tiny stamens. Springy and lighter; reads delicate.",
+  },
+];
+
+function renderFlower(
+  kind: FlowerKind,
+  petal: string,
+  stemLength: number,
+  scale: number,
+  centerContent: React.ReactNode,
+) {
+  const common = {
+    petalColor: petal,
+    petalEdge: EDGE,
+    centerContent,
+    stemLength,
+    scale,
+  };
+  switch (kind) {
+    case "petal":
+      return <PetalFlowerBold {...common} />;
+    case "sunflower":
+      return <SunflowerBold {...common} />;
+    case "tulip":
+      return <TulipBold {...common} />;
+    case "poppy":
+      return <PoppyBold {...common} />;
+    case "daffodil":
+      return <DaffodilBold {...common} />;
+    case "cherryblossom":
+      return <CherryBlossomBold {...common} />;
+  }
+}
 
 export default function FlowerStyles() {
   const centerContent = (
     <text
       x={0}
       y={0}
-      fontSize={26}
+      fontSize={20}
       textAnchor="middle"
       dominantBaseline="central"
       style={{ userSelect: "none" }}
@@ -28,90 +118,8 @@ export default function FlowerStyles() {
       🐝
     </text>
   );
-  const stemLength = 160;
-  const scale = 1.1;
-
-  const items: Array<{
-    key: string;
-    label: string;
-    blurb: string;
-    flower: React.ReactNode;
-  }> = [
-    {
-      key: "current",
-      label: "A. Current",
-      blurb: "5 overlapping round petals, dark outline, single leaf.",
-      flower: (
-        <PetalFlowerCurrent
-          petalColor={COLOR}
-          petalEdge={EDGE}
-          stemLength={stemLength}
-          scale={scale}
-          centerContent={centerContent}
-        />
-      ),
-    },
-    {
-      key: "bold",
-      label: "B. Bold cartoon",
-      blurb:
-        "Thicker black outlines, punchier fill, gentle highlight. Reads at a glance.",
-      flower: (
-        <PetalFlowerBold
-          petalColor={COLOR}
-          petalEdge={EDGE}
-          stemLength={stemLength}
-          scale={scale}
-          centerContent={centerContent}
-        />
-      ),
-    },
-    {
-      key: "painterly",
-      label: "C. Painterly",
-      blurb:
-        "Gradient tip shading on each petal + soft inner glow. Feels hand-painted.",
-      flower: (
-        <PetalFlowerPainterly
-          petalColor={COLOR}
-          petalEdge={EDGE}
-          stemLength={stemLength}
-          scale={scale}
-          centerContent={centerContent}
-        />
-      ),
-    },
-    {
-      key: "sunflower",
-      label: "D. Sunflower",
-      blurb:
-        "Many narrow petals fanning around a fat textured center. Bigger silhouette.",
-      flower: (
-        <PetalFlowerSunflower
-          petalColor={COLOR}
-          petalEdge={EDGE}
-          stemLength={stemLength}
-          scale={scale}
-          centerContent={centerContent}
-        />
-      ),
-    },
-    {
-      key: "geometric",
-      label: "E. Geometric",
-      blurb:
-        "Flat, sharp-tipped petals, no outline. Modern / app-icon flavor.",
-      flower: (
-        <PetalFlowerGeometric
-          petalColor={COLOR}
-          petalEdge={EDGE}
-          stemLength={stemLength}
-          scale={scale}
-          centerContent={centerContent}
-        />
-      ),
-    },
-  ];
+  const stemLength = 140;
+  const scale = 0.85;
 
   return (
     <>
@@ -128,62 +136,95 @@ export default function FlowerStyles() {
       <main
         style={{
           minHeight: "100dvh",
-          padding: "60px 24px 24px",
+          padding: "60px 20px 24px",
           display: "flex",
           flexDirection: "column",
           gap: 16,
           color: "var(--fg)",
         }}
       >
-        <h1 style={{ margin: 0, color: "var(--accent)" }}>Flower styles</h1>
-        <p style={{ color: "var(--muted)", marginTop: 0 }}>
-          Visual comparison for the WordHive picker flower. Tell me which
-          letter you want and I'll roll it out across all three games (color
-          per game). Backdrop here is the new less-pastel garden palette.
+        <h1 style={{ margin: 0, color: "var(--accent)" }}>
+          Flower lineup — bold cartoon
+        </h1>
+        <p style={{ color: "var(--muted)", marginTop: 0, maxWidth: 720 }}>
+          Six species in bold-cartoon style, each shown in the three lobby
+          palettes (WordHive gold / MathHive royal blue / Pollinart white).
+          Pick one species per game and I'll wire it up.
         </p>
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            gap: 24,
-            alignItems: "end",
-            justifyItems: "center",
-            marginTop: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 28,
             paddingBottom: 32,
           }}
         >
-          {items.map((it) => (
-            <div
-              key={it.key}
+          {SPECIES.map((s) => (
+            <section
+              key={s.key}
               style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 8,
                 background: "rgba(0,0,0,0.32)",
                 backdropFilter: "blur(4px)",
                 border: "1px solid var(--border)",
                 borderRadius: 14,
-                padding: "12px 12px 16px",
-                width: "100%",
-                maxWidth: 320,
+                padding: "14px 14px 18px",
               }}
             >
-              <div style={{ flex: 1, display: "flex", alignItems: "end" }}>
-                {it.flower}
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                <h2 style={{ margin: 0, fontSize: 22 }}>{s.label}</h2>
+                <span style={{ color: "var(--muted)", fontSize: 13 }}>
+                  ({s.key})
+                </span>
               </div>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>{it.label}</div>
-              <div
+              <p
                 style={{
-                  fontSize: 13,
                   color: "var(--muted)",
-                  textAlign: "center",
-                  lineHeight: 1.35,
+                  fontSize: 14,
+                  marginTop: 4,
+                  marginBottom: 14,
+                  lineHeight: 1.4,
                 }}
               >
-                {it.blurb}
+                {s.blurb}
+              </p>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                  gap: 16,
+                  alignItems: "end",
+                  justifyItems: "center",
+                }}
+              >
+                {PALETTES.map((p) => (
+                  <div
+                    key={p.name}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    {renderFlower(
+                      s.key,
+                      p.petal,
+                      stemLength,
+                      scale,
+                      centerContent,
+                    )}
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "var(--muted)",
+                      }}
+                    >
+                      {p.name}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            </section>
           ))}
         </div>
       </main>
