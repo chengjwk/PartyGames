@@ -23,6 +23,7 @@ import DrawingReplay from "../components/DrawingReplay";
 import type { PublicGameState } from "../shared/types";
 import type {
   ChainRevealed,
+  PollinartComplexity,
   PollinartPublicGameState,
   PollinartServerMessage,
 } from "../shared/pollinart-types";
@@ -429,6 +430,7 @@ function BigChainPlayback({
       <BigSeedCard
         startingWord={chain.startingWord}
         starterName={state.players.find((p) => p.id === chain.startedBy)?.name ?? ""}
+        tier={chain.tier}
       />
       {revealed.map((pair) => (
         <BigPairCard key={pair.drawIndex} pair={pair} />
@@ -440,9 +442,11 @@ function BigChainPlayback({
 function BigSeedCard({
   startingWord,
   starterName,
+  tier,
 }: {
   startingWord: string;
   starterName: string;
+  tier: PollinartComplexity;
 }) {
   return (
     <div
@@ -460,6 +464,7 @@ function BigSeedCard({
         alignItems: "center",
       }}
     >
+      <BigTierBadge tier={tier} />
       <div style={{ color: "var(--muted)", fontSize: 18 }}>
         {starterName} started with
       </div>
@@ -467,6 +472,39 @@ function BigSeedCard({
         {startingWord}
       </div>
     </div>
+  );
+}
+
+// TV-sized tier pill — visible across the room. Color-coded so the
+// hard-chain (2× points) lane stands out from the easy lanes during
+// the host's walkthrough.
+function BigTierBadge({ tier }: { tier: PollinartComplexity }) {
+  const meta: Record<
+    PollinartComplexity,
+    { label: string; bg: string; fg: string; mult: string }
+  > = {
+    easy: { label: "Easy", bg: "#3fa34d", fg: "#06140a", mult: "1×" },
+    medium: { label: "Medium", bg: "#e8a13a", fg: "#1a1004", mult: "1.5×" },
+    hard: { label: "Hard", bg: "#d24a52", fg: "#1f0608", mult: "2×" },
+  };
+  const m = meta[tier];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "5px 14px",
+        borderRadius: 999,
+        fontSize: 18,
+        fontWeight: 700,
+        background: m.bg,
+        color: m.fg,
+      }}
+    >
+      {m.label}
+      <span style={{ opacity: 0.8, fontWeight: 600 }}>{m.mult}</span>
+    </span>
   );
 }
 

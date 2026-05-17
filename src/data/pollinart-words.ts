@@ -1,7 +1,9 @@
-// Curated word pools for Pollinart. Three complexity tiers; the lobby
-// picker selects a tier and every chain in the round samples its
-// starting words from that tier. Word choices for each player are
-// drawn without replacement from the active tier so picks feel fresh.
+// Curated word pools for Pollinart. Three difficulty tiers — every
+// round is now a mix (target 2 easy / 1 medium / 1 hard at 4 players,
+// scaled at other counts), so each chain samples its starting word
+// from its assigned tier rather than a single lobby-selected tier.
+// Word choices for each player are drawn without replacement from
+// their tier deck so picks feel fresh across the round.
 //
 // Curation philosophy:
 //   - Easy:   concrete, single-noun, kid-drawable in 30s.
@@ -819,6 +821,42 @@ function shuffle<T>(arr: T[]): T[] {
 // no two players see the same options.
 export function buildWordDeck(tier: PollinartComplexity): string[] {
   return shuffle(POOLS[tier]);
+}
+
+// Build a shuffled deck per tier — used by the per-chain mixed-tier
+// dealing pipeline. Each chain pulls its starting-word choices from
+// the deck matching its assigned tier.
+export function buildMixedDecks(): Record<PollinartComplexity, string[]> {
+  return {
+    easy: shuffle(POOLS.easy),
+    medium: shuffle(POOLS.medium),
+    hard: shuffle(POOLS.hard),
+  };
+}
+
+// Decide which tiers to assign across N chains in a round. Target mix
+// is 2 easy / 1 medium / 1 hard at the canonical 4-player game, and
+// scales for other player counts so the round always has variety:
+//   N=2 → [easy, easy]               (no medium/hard — not enough room)
+//   N=3 → [easy, easy, medium]       (skip hard at 3p so chain count = #tiers)
+//   N=4 → [easy, easy, medium, hard] (the spec)
+//   N=5 → [easy, easy, easy, medium, hard]
+//   N=6 → [easy, easy, easy, medium, medium, hard]
+//   N=7 → [easy, easy, easy, easy, medium, medium, hard]
+//   N=8 → [easy, easy, easy, easy, medium, medium, hard, hard]
+// Rough ratio: ~50% easy, ~25% medium, ~25% hard, with floors of 1
+// medium (N≥3) and 1 hard (N≥4) so the points-multiplier chains are
+// always present.
+export function tierMixForCount(n: number): PollinartComplexity[] {
+  if (n <= 0) return [];
+  const easy = Math.max(1, Math.ceil(n * 0.5));
+  const hard = n >= 4 ? Math.max(1, Math.floor(n * 0.25)) : 0;
+  const medium = Math.max(0, n - easy - hard);
+  const out: PollinartComplexity[] = [];
+  for (let i = 0; i < easy; i++) out.push("easy");
+  for (let i = 0; i < medium; i++) out.push("medium");
+  for (let i = 0; i < hard; i++) out.push("hard");
+  return out;
 }
 
 // Pick k unique words from the deck starting at `cursor`. Wraps around if

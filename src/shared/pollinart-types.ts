@@ -92,6 +92,11 @@ export interface ChainPublic {
   playerSequence: string[];
   // Total number of steps in this chain (== playerSequence.length).
   chainLength: number;
+  // Difficulty tier the chain's starting word was drawn from. Drives
+  // the per-chain points multiplier: easy=1x, medium=1.5x, hard=2x.
+  // Every round is a mix (2 easy / 1 medium / 1 hard for a 4-player
+  // game; scaled for other player counts).
+  tier: PollinartComplexity;
 }
 
 // Per-chain summary returned at the end of the round so clients can
@@ -195,7 +200,6 @@ export interface PollinartPublicGameState {
     drawSeconds: number;
     guessSeconds: number;
     pickSeconds: number;
-    complexity: PollinartComplexity;
   };
   players: Player[];
   hostPlayerId: string | null;
@@ -247,7 +251,6 @@ export type PollinartClientMessage =
         drawSeconds: number;
         guessSeconds: number;
         pickSeconds: number;
-        complexity: PollinartComplexity;
       }>;
     }
   | { type: "startGame" }

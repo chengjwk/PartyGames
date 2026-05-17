@@ -36,7 +36,11 @@ import type {
   PollinartServerMessage,
   PollinartTask,
 } from "../src/shared/pollinart-types";
-import { buildWordDeck, dealChoices } from "../src/data/pollinart-words";
+import {
+  buildMixedDecks,
+  dealChoices,
+  tierMixForCount,
+} from "../src/data/pollinart-words";
 
 const COUNTDOWN_MS = 3000;
 const PAUSE_GRACE_MS = 3000;
@@ -57,12 +61,21 @@ const ORIGINATOR_BONUS_POINTS = 7;
 // papers over "hot dog" vs "hotdog" and similar spacing variants.
 const LEV_TOLERANCE = 3;
 
+// Per-tier points multiplier. Every round is a mix (2 easy / 1 medium
+// / 1 hard for 4p, scaled otherwise), so the medium and hard chains
+// are higher-stakes lanes that reward everyone in them more. This
+// multiplier compounds with each player's `scoreMultiplier` handicap.
+const TIER_MULTIPLIER: Record<PollinartComplexity, number> = {
+  easy: 1,
+  medium: 1.5,
+  hard: 2,
+};
+
 interface PollinartConfig {
   totalRounds: number;
   drawSeconds: number;
   guessSeconds: number;
   pickSeconds: number;
-  complexity: PollinartComplexity;
 }
 
 const DEFAULT_CONFIG: PollinartConfig = {
@@ -72,7 +85,6 @@ const DEFAULT_CONFIG: PollinartConfig = {
   drawSeconds: 75,
   guessSeconds: 30,
   pickSeconds: 10,
-  complexity: "easy",
 };
 
 type PollinartPhase =
@@ -91,6 +103,9 @@ interface InternalChain {
   startingWord: string | null; // null until owner picks
   playerSequence: string[];    // playerIds in chain order
   steps: ChainStep[];          // grows one per step submission round
+  // Difficulty tier the chain's starting word was drawn from. Drives
+  // per-chain scoring multiplier (see TIER_MULTIPLIER).
+  tier: PollinartComplexity;
 }
 
 interface PerPlayerRoundState {
@@ -119,9 +134,19 @@ export default class PollinartServer implements Party.Server {
   private hostPlayerId: string | null = null;
   private totalScores = new Map<string, number>();
 
-  // Round-scoped state
-  private wordDeck: string[] = [];
-  private wordDeckCursor = 0;
+  // Round-scoped state. Each round builds one shuffled deck per tier
+  // (mixed-tier dealing) and tracks an independent cursor per deck so
+  // word picks for one tier don't shift cursors for the others.
+  private decksByTier: Record<PollinartComplexity, string[]> = {
+    easy: [],
+    medium: [],
+    hard: [],
+  };
+  private cursorsByTier: Record<PollinartComplexity, number> = {
+    easy: 0,
+    medium: 0,
+    hard: 0,
+  };
   private perPlayer = new Map<string, PerPlayerRoundState>();
   private chains: InternalChain[] = [];
   private stepIndex = 0;
@@ -350,13 +375,6 @@ export default class PollinartServer implements Party.Server {
     if (typeof msg.config.pickSeconds === "number") {
       next.pickSeconds = clamp(Math.round(msg.config.pickSeconds), 3, 60);
     }
-    if (
-      msg.config.complexity === "easy" ||
-      msg.config.complexity === "medium" ||
-      msg.config.complexity === "hard"
-    ) {
-      next.complexity = msg.config.complexity;
-    }
     this.config = next;
     this.broadcastState();
   }
@@ -375,10 +393,10 @@ export default class PollinartServer implements Party.Server {
 
   private beginCountdown() {
     this.currentRound += 1;
-    // Build new word deck per round so different rounds use fresh starting
-    // word possibilities.
-    this.wordDeck = buildWordDeck(this.config.complexity);
-    this.wordDeckCursor = 0;
+    // Build fresh per-tier decks for the round so each chain's starting
+    // word comes from its assigned tier with no cross-round repeats.
+    this.decksByTier = buildMixedDecks();
+    this.cursorsByTier = { easy: 0, medium: 0, hard: 0 };
     this.perPlayer.clear();
     this.chains = [];
     this.stepIndex = 0;
@@ -410,6 +428,10 @@ export default class PollinartServer implements Party.Server {
     // rotate which one across chains so participation evens out.
     this.chainLength =
       shuffled.length % 2 === 0 ? shuffled.length : shuffled.length - 1;
+    // Assign a difficulty tier per chain. The mix (2 easy / 1 medium /
+    // 1 hard at 4p, scaled at other counts) is shuffled so it isn't
+    // always the same originator stuck with hard.
+    const tiers = shuffle(tierMixForCount(shuffled.length));
     this.chains = shuffled.map((ownerId, k) => {
       // Chain k's player sequence rotates starting at k for chainLength entries.
       const seq: string[] = [];
@@ -422,13 +444,22 @@ export default class PollinartServer implements Party.Server {
         startingWord: null,
         playerSequence: seq,
         steps: [],
+        tier: tiers[k] ?? "easy",
       };
     });
-    // Deal 3 word choices to each connected player from the round's deck.
+    // Deal 3 word choices to each connected player from the deck
+    // matching THEIR chain's tier. Each tier deck has an independent
+    // cursor so picks for one tier don't shift cursors for the others.
     const k = 3;
     for (const p of connected) {
-      const choices = dealChoices(this.wordDeck, this.wordDeckCursor, k);
-      this.wordDeckCursor += k;
+      const ownChain = this.chains.find((c) => c.startedBy === p.id);
+      const tier: PollinartComplexity = ownChain?.tier ?? "easy";
+      const choices = dealChoices(
+        this.decksByTier[tier],
+        this.cursorsByTier[tier],
+        k,
+      );
+      this.cursorsByTier[tier] += k;
       this.perPlayer.set(p.id, {
         pickChoices: choices,
         pickedWord: null,
@@ -645,11 +676,14 @@ export default class PollinartServer implements Party.Server {
     const perPlayerTotals = new Map<string, number>();
     const summaryChains: ChainRevealed[] = [];
     for (const chain of this.chains) {
+      // Tier multiplier — every player who scores in this chain gets
+      // their amount scaled before the handicap. medium=1.5x, hard=2x.
+      const tierMult = TIER_MULTIPLIER[chain.tier] ?? 1;
       const pointsByPlayer: Record<string, number> = {};
       const award = (pid: string, amount: number) => {
         const p = this.players.get(pid);
-        const mult = p?.scoreMultiplier ?? 1;
-        const total = Math.round(amount * mult);
+        const handicap = p?.scoreMultiplier ?? 1;
+        const total = Math.round(amount * tierMult * handicap);
         pointsByPlayer[pid] = (pointsByPlayer[pid] ?? 0) + total;
         perPlayerTotals.set(pid, (perPlayerTotals.get(pid) ?? 0) + total);
       };
@@ -689,6 +723,7 @@ export default class PollinartServer implements Party.Server {
         startedBy: chain.startedBy,
         playerSequence: chain.playerSequence,
         chainLength: chain.playerSequence.length,
+        tier: chain.tier,
         startingWord: chain.startingWord ?? "",
         steps: chain.steps,
         pointsByPlayer,
@@ -933,8 +968,8 @@ export default class PollinartServer implements Party.Server {
       clearTimeout(this.startTimer);
       this.startTimer = null;
     }
-    this.wordDeck = [];
-    this.wordDeckCursor = 0;
+    this.decksByTier = { easy: [], medium: [], hard: [] };
+    this.cursorsByTier = { easy: 0, medium: 0, hard: 0 };
     this.perPlayer.clear();
     this.chains = [];
     this.stepIndex = 0;
@@ -1121,6 +1156,7 @@ export default class PollinartServer implements Party.Server {
             startedBy: c.startedBy,
             playerSequence: c.playerSequence,
             chainLength: c.playerSequence.length,
+            tier: c.tier,
           }));
     return {
       phase: this.phase,

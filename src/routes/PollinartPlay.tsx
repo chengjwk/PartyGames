@@ -204,7 +204,12 @@ export default function PollinartPlay() {
     case "DRAW_PHASE":
     case "GUESS_PHASE":
       view = (
-        <ActiveStep state={state} privateState={privateState} send={send} />
+        <ActiveStep
+          state={state}
+          privateState={privateState}
+          send={send}
+          clientId={clientId}
+        />
       );
       break;
     case "REVEAL":
@@ -362,12 +367,21 @@ function Lobby({
                 onChange={(v) => setCfg({ guessSeconds: v })}
               />
             </ConfigRow>
-            <ConfigRow label="Word difficulty">
-              <ComplexityPicker
-                value={cfg.complexity}
-                onChange={(c) => setCfg({ complexity: c })}
-              />
-            </ConfigRow>
+            {/* Each round is a mix — 2 easy / 1 medium / 1 hard
+                clues (scaled by player count). Medium and hard chains
+                pay 1.5× and 2× the baseline, so difficulty is no
+                longer a single lobby switch. */}
+            <p
+              style={{
+                fontSize: 12,
+                color: "var(--muted)",
+                margin: "8px 0 0",
+                lineHeight: 1.4,
+              }}
+            >
+              Every round mixes easy / medium / hard clues. Medium pays
+              1.5× and hard pays 2×.
+            </p>
           </section>
           <button
             onClick={() => send({ type: "startGame" })}
@@ -410,37 +424,37 @@ function Lobby({
   );
 }
 
-function ComplexityPicker({
-  value,
-  onChange,
-}: {
-  value: PollinartComplexity;
-  onChange: (c: PollinartComplexity) => void;
-}) {
-  const opts: Array<{ id: PollinartComplexity; label: string }> = [
-    { id: "easy", label: "Easy" },
-    { id: "medium", label: "Medium" },
-    { id: "hard", label: "Hard" },
-  ];
+// Difficulty-tier pill shown on the pickWord screen and on reveal
+// SeedCards. Color-coded so easy/medium/hard read at a glance, and
+// the multiplier on medium/hard is part of the chip so players know
+// the stakes when they're picking or watching the chain replay.
+function TierBadge({ tier }: { tier: PollinartComplexity }) {
+  const meta: Record<
+    PollinartComplexity,
+    { label: string; bg: string; fg: string; mult: string }
+  > = {
+    easy: { label: "Easy", bg: "#3fa34d", fg: "#06140a", mult: "1×" },
+    medium: { label: "Medium", bg: "#e8a13a", fg: "#1a1004", mult: "1.5×" },
+    hard: { label: "Hard", bg: "#d24a52", fg: "#1f0608", mult: "2×" },
+  };
+  const m = meta[tier];
   return (
-    <div style={{ display: "flex", gap: 6 }}>
-      {opts.map((o) => (
-        <button
-          key={o.id}
-          onClick={() => onChange(o.id)}
-          style={{
-            padding: "6px 12px",
-            background: value === o.id ? ACCENT : "var(--bg-elev)",
-            color: value === o.id ? ACCENT_FG : "var(--fg)",
-            border: "1px solid var(--border)",
-            borderRadius: 6,
-            fontWeight: 600,
-          }}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "3px 9px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 700,
+        background: m.bg,
+        color: m.fg,
+      }}
+    >
+      {m.label}
+      <span style={{ opacity: 0.8, fontWeight: 600 }}>{m.mult}</span>
+    </span>
   );
 }
 
@@ -477,10 +491,12 @@ function ActiveStep({
   state,
   privateState,
   send,
+  clientId,
 }: {
   state: PollinartPublicGameState;
   privateState: PollinartPrivateState | null;
   send: (m: PollinartClientMessage) => void;
+  clientId: string;
 }) {
   const task = privateState?.task;
   const phaseEndsAt = state.phaseEndsAt;
@@ -527,11 +543,19 @@ function ActiveStep({
   );
 
   if (task.kind === "pickWord") {
+    // Each chain has a difficulty tier — easy / medium / hard. The
+    // picker sees a badge so they know whether they're playing the
+    // baseline easy lane or one of the bonus-points lanes.
+    const myChain = state.chains?.find((c) => c.startedBy === clientId);
+    const tier = myChain?.tier ?? "easy";
     return (
       <main style={{ padding: "60px 0 24px", display: "flex", flexDirection: "column" }}>
         {header}
         <div style={{ padding: "0 16px" }}>
           <h2 style={{ marginTop: 0 }}>Pick a word to draw</h2>
+          <div style={{ marginTop: 4, marginBottom: 8 }}>
+            <TierBadge tier={tier} />
+          </div>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>
             Whatever you pick is what you'll draw for your chain.
           </p>
@@ -936,6 +960,7 @@ function ChainPlayback({
         starterName={
           state.players.find((p) => p.id === chain.startedBy)?.name ?? ""
         }
+        tier={chain.tier}
       />
       {revealedPairs.map((pair) => {
         const iAmDrawer =
@@ -964,9 +989,11 @@ function ChainPlayback({
 function SeedCard({
   startingWord,
   starterName,
+  tier,
 }: {
   startingWord: string;
   starterName: string;
+  tier: PollinartComplexity;
 }) {
   return (
     <div
@@ -976,8 +1003,13 @@ function SeedCard({
         borderRadius: 12,
         border: "1px solid var(--border)",
         textAlign: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 4,
       }}
     >
+      <TierBadge tier={tier} />
       <div style={{ color: "var(--muted)", fontSize: 12 }}>
         {starterName} started with
       </div>
