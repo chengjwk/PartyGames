@@ -15,8 +15,8 @@ import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import SunflowerPainterly from "../components/styles/SunflowerPainterly";
-import TulipPainterly from "../components/styles/TulipPainterly";
-import PoppyPainterly from "../components/styles/PoppyPainterly";
+import CherryBlossomPainterly from "../components/styles/CherryBlossomPainterly";
+import LotusPainterly from "../components/styles/LotusPainterly";
 import ThemeToggle from "../components/ThemeToggle";
 import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import type {
@@ -375,10 +375,10 @@ function FlowerButton({
         switch (meta.flower) {
           case "sunflower":
             return <SunflowerPainterly {...common} />;
-          case "tulip":
-            return <TulipPainterly {...common} />;
-          case "poppy":
-            return <PoppyPainterly {...common} />;
+          case "cherryBlossom":
+            return <CherryBlossomPainterly {...common} />;
+          case "lotus":
+            return <LotusPainterly {...common} />;
         }
       })()}
       <div style={{ fontSize: 18, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
@@ -411,7 +411,7 @@ export function pickerMeta(game: LobbyGame): {
   label: string;
   tagline: string;
   emoji: string;
-  flower: "sunflower" | "tulip" | "poppy";
+  flower: "sunflower" | "cherryBlossom" | "lotus";
   petalColor: string;
   // Dark outline / edge tint passed to every bold-cartoon flower
   // as `petalEdge`. Kept the prop name "petalHighlight" for
@@ -442,21 +442,25 @@ export function pickerMeta(game: LobbyGame): {
       label: "MathHive",
       tagline: "Solve the number",
       emoji: "🧮",
-      flower: "tulip",
-      petalColor: "#3a76db",
-      petalHighlight: "#0e1a3a",
-      stemLength: 118,
+      flower: "cherryBlossom",
+      // Cherry blossom pink — preserving "MathHive blue" felt wrong
+      // for a cherry blossom, so we let the species color it.
+      petalColor: "#f7a8c4",
+      petalHighlight: "#7a2e4a",
+      stemLength: 110,
     };
   }
-  // draw → Pollinart — red poppy
+  // draw → Pollinart — lotus on a pond
   return {
     label: "Pollinart",
     tagline: "Draw, guess, repeat",
     emoji: "🎨",
-    flower: "poppy",
-    petalColor: "#d12646",
-    petalHighlight: "#3a0a14",
-    stemLength: 94,
+    flower: "lotus",
+    // Soft pink lotus. Red would also work but the natural pink
+    // reads as "lotus" much faster.
+    petalColor: "#f7a8c4",
+    petalHighlight: "#7a2e4a",
+    stemLength: 96,
   };
 }
 

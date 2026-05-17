@@ -13,8 +13,8 @@ import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import SunflowerPainterly from "../components/styles/SunflowerPainterly";
-import TulipPainterly from "../components/styles/TulipPainterly";
-import PoppyPainterly from "../components/styles/PoppyPainterly";
+import CherryBlossomPainterly from "../components/styles/CherryBlossomPainterly";
+import LotusPainterly from "../components/styles/LotusPainterly";
 import ThemeToggle from "../components/ThemeToggle";
 import type {
   LobbyGame,
@@ -248,11 +248,11 @@ function DisplayFlower({
     case "sunflower":
       flower = <SunflowerPainterly {...flowerCommon} />;
       break;
-    case "tulip":
-      flower = <TulipPainterly {...flowerCommon} />;
+    case "cherryBlossom":
+      flower = <CherryBlossomPainterly {...flowerCommon} />;
       break;
-    case "poppy":
-      flower = <PoppyPainterly {...flowerCommon} />;
+    case "lotus":
+      flower = <LotusPainterly {...flowerCommon} />;
       break;
   }
   return (
@@ -268,7 +268,7 @@ function DisplayFlower({
 function displayMeta(game: LobbyGame): {
   label: string;
   emoji: string;
-  flower: "sunflower" | "tulip" | "poppy";
+  flower: "sunflower" | "cherryBlossom" | "lotus";
   petalColor: string;
   petalHighlight: string;
   stemLength: number;
@@ -280,7 +280,7 @@ function displayMeta(game: LobbyGame): {
       flower: "sunflower",
       petalColor: "#f5b400",
       petalHighlight: "#3a2410",
-      // Sunflower is the hero plant — clearly the tallest on TV.
+      // Sunflower stays the hero plant — clearly the tallest on TV.
       stemLength: 280,
     };
   }
@@ -288,18 +288,18 @@ function displayMeta(game: LobbyGame): {
     return {
       label: "MathHive",
       emoji: "🧮",
-      flower: "tulip",
-      petalColor: "#3a76db",
-      petalHighlight: "#0e1a3a",
-      stemLength: 220,
+      flower: "cherryBlossom",
+      petalColor: "#f7a8c4",
+      petalHighlight: "#7a2e4a",
+      stemLength: 200,
     };
   }
   return {
     label: "Pollinart",
     emoji: "🎨",
-    flower: "poppy",
-    petalColor: "#d12646",
-    petalHighlight: "#3a0a14",
+    flower: "lotus",
+    petalColor: "#f7a8c4",
+    petalHighlight: "#7a2e4a",
     stemLength: 175,
   };
 }
