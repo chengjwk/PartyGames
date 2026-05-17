@@ -14,14 +14,11 @@ import { AVATARS, randomAvatar } from "../lib/avatars";
 import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
-import SunflowerPainterly from "../components/styles/SunflowerPainterly";
-import CherryBlossomPainterly from "../components/styles/CherryBlossomPainterly";
-import LotusPainterly from "../components/styles/LotusPainterly";
+import GardenPicker from "../components/GardenPicker";
 import ThemeToggle from "../components/ThemeToggle";
 import { requestFullscreenIfMobile } from "../lib/fullscreen";
 import type {
   LobbyClientMessage,
-  LobbyGame,
   LobbyServerMessage,
   LobbyState,
 } from "../../party/lobby";
@@ -277,37 +274,14 @@ export default function LobbyPlay() {
         <div style={{ flex: 1, minHeight: 24 }} />
 
         <section style={{ paddingBottom: 16 }}>
-          <h3 style={{ margin: "0 0 4px", textAlign: "center", color: "var(--fg)" }}>
+          <h3 style={{ margin: "0 0 8px", textAlign: "center", color: "var(--fg)" }}>
             {isHost ? "Pick a game" : `${hostName} is picking…`}
           </h3>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 8,
-              justifyItems: "center",
-              alignItems: "end",
-            }}
-          >
-            <FlowerButton
-              game="word"
-              swayKeyframes="lily-sway-a"
-              disabled={!isHost}
-              onPick={() => send({ type: "pickGame", game: "word" })}
-            />
-            <FlowerButton
-              game="math"
-              swayKeyframes="lily-sway-b"
-              disabled={!isHost}
-              onPick={() => send({ type: "pickGame", game: "math" })}
-            />
-            <FlowerButton
-              game="draw"
-              swayKeyframes="lily-sway-c"
-              disabled={!isHost}
-              onPick={() => send({ type: "pickGame", game: "draw" })}
-            />
-          </div>
+          <GardenPicker
+            isHost={isHost}
+            compact
+            onPick={(game) => send({ type: "pickGame", game })}
+          />
         </section>
       </main>
     </>
@@ -315,154 +289,6 @@ export default function LobbyPlay() {
 }
 
 // Game-picker flower — tappable button. Each game has its own species so
-// the picker reads as a small garden patch rather than three clones.
-// WordHive and MathHive are lilies (honey-yellow / soft-blue) at slightly
-// different stem heights; Pollinart is a white daisy. All grow up from
-// the same ground line (alignItems: "end" on the grid).
-function FlowerButton({
-  game,
-  onPick,
-  swayKeyframes,
-  disabled,
-}: {
-  game: LobbyGame;
-  onPick: () => void;
-  swayKeyframes: string;
-  disabled: boolean;
-}) {
-  const meta = pickerMeta(game);
-
-  return (
-    <button
-      onClick={disabled ? undefined : onPick}
-      disabled={disabled}
-      aria-label={`Pick ${meta.label}`}
-      style={{
-        background: "transparent",
-        border: "none",
-        padding: 0,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        cursor: disabled ? "default" : "pointer",
-        opacity: disabled ? 0.55 : 1,
-        filter: disabled ? "saturate(0.6)" : undefined,
-        transition: "opacity 0.2s",
-      }}
-    >
-      {(() => {
-        const centerContent = (
-          <text
-            x={0}
-            y={0}
-            fontSize={18}
-            textAnchor="middle"
-            dominantBaseline="central"
-            style={{ userSelect: "none" }}
-          >
-            {meta.emoji}
-          </text>
-        );
-        const common = {
-          petalColor: meta.petalColor,
-          petalEdge: meta.petalHighlight,
-          stemLength: meta.stemLength,
-          scale: 0.8,
-          swayKeyframes,
-          bloomIn: true,
-          centerContent,
-        };
-        switch (meta.flower) {
-          case "sunflower":
-            return <SunflowerPainterly {...common} />;
-          case "cherryBlossom":
-            return <CherryBlossomPainterly {...common} />;
-          case "lotus":
-            return <LotusPainterly {...common} />;
-        }
-      })()}
-      <div style={{ fontSize: 18, fontWeight: 700, color: "var(--fg)", marginTop: 6 }}>
-        {meta.label}
-      </div>
-      <div
-        style={{
-          fontSize: 11,
-          color: "var(--muted)",
-          textAlign: "center",
-          padding: "0 4px",
-          lineHeight: 1.3,
-          maxWidth: 120,
-        }}
-      >
-        {meta.tagline}
-      </div>
-    </button>
-  );
-}
-
-// Single source of truth for the picker visuals — used here and on the
-// TV (LobbyHost). Each game gets its own flower species so the three
-// silhouettes in the picker patch read as distinct plants rather than
-// recolored clones.
-//   - WordHive  → 5-round-petal flower ("petal"), honey yellow
-//   - MathHive  → lily, soft blue
-//   - Pollinart → daisy, white
-export function pickerMeta(game: LobbyGame): {
-  label: string;
-  tagline: string;
-  emoji: string;
-  flower: "sunflower" | "cherryBlossom" | "lotus";
-  petalColor: string;
-  // Dark outline / edge tint passed to every bold-cartoon flower
-  // as `petalEdge`. Kept the prop name "petalHighlight" for
-  // backwards compat with the older flower components in
-  // /flower-styles.
-  petalHighlight: string;
-  stemLength: number;
-} {
-  if (game === "word") {
-    return {
-      label: "WordHive",
-      tagline: "Spell with the bees",
-      emoji: "🐝",
-      flower: "sunflower",
-      // Sunflower gold — a touch yellower than the previous honey
-      // so it reads unmistakably as a sunflower.
-      petalColor: "#f5b400",
-      // Outline color for the painterly stroke. Warm brown reads
-      // softer than pure black at low opacity.
-      petalHighlight: "#3a2410",
-      // Sunflower is the tallest of the three so the picker garden
-      // has a clear hero plant.
-      stemLength: 150,
-    };
-  }
-  if (game === "math") {
-    return {
-      label: "MathHive",
-      tagline: "Solve the number",
-      emoji: "🧮",
-      flower: "cherryBlossom",
-      // Cherry blossom pink — preserving "MathHive blue" felt wrong
-      // for a cherry blossom, so we let the species color it.
-      petalColor: "#f7a8c4",
-      petalHighlight: "#7a2e4a",
-      stemLength: 110,
-    };
-  }
-  // draw → Pollinart — lotus on a pond
-  return {
-    label: "Pollinart",
-    tagline: "Draw, guess, repeat",
-    emoji: "🎨",
-    flower: "lotus",
-    // Soft pink lotus. Red would also work but the natural pink
-    // reads as "lotus" much faster.
-    petalColor: "#f7a8c4",
-    petalHighlight: "#7a2e4a",
-    stemLength: 96,
-  };
-}
 
 function NameEntry({
   roomCode,

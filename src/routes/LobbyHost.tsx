@@ -12,12 +12,9 @@ import Avatar from "../components/Avatar";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
 import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
-import SunflowerPainterly from "../components/styles/SunflowerPainterly";
-import CherryBlossomPainterly from "../components/styles/CherryBlossomPainterly";
-import LotusPainterly from "../components/styles/LotusPainterly";
+import GardenPicker from "../components/GardenPicker";
 import ThemeToggle from "../components/ThemeToggle";
 import type {
-  LobbyGame,
   LobbyServerMessage,
   LobbyState,
 } from "../../party/lobby";
@@ -193,113 +190,15 @@ export default function LobbyHost() {
           <p style={{ color: "var(--fg)", margin: "0 0 12px", fontSize: 24, fontWeight: 600 }}>
             {hostName ? `${hostName} is picking a game…` : "Waiting for first player to join."}
           </p>
-          <div
-            style={{
-              display: "flex",
-              gap: 64,
-              justifyContent: "center",
-              alignItems: "end",
+          <GardenPicker
+            isHost={false}
+            compact={false}
+            onPick={() => {
+              /* TV is non-interactive — picking happens on the phone. */
             }}
-          >
-            <DisplayFlower kind="word" swayKeyframes="lily-sway-a" />
-            <DisplayFlower kind="math" swayKeyframes="lily-sway-b" />
-            <DisplayFlower kind="draw" swayKeyframes="lily-sway-c" />
-          </div>
+          />
         </section>
       </main>
     </>
   );
-}
-
-// TV-side decorative flower. Mirrors the phone picker so the host's
-// display shows the same garden patch as their phone. Not interactive
-// — picking happens on the phone. Each game has its own species + stem
-// height so the silhouettes read as a varied garden.
-function DisplayFlower({
-  kind,
-  swayKeyframes,
-}: {
-  kind: LobbyGame;
-  swayKeyframes: string;
-}) {
-  const meta = displayMeta(kind);
-  const centerContent = (
-    <text
-      x={0}
-      y={0}
-      fontSize={42}
-      textAnchor="middle"
-      dominantBaseline="central"
-      style={{ userSelect: "none" }}
-    >
-      {meta.emoji}
-    </text>
-  );
-  const flowerCommon = {
-    petalColor: meta.petalColor,
-    petalEdge: meta.petalHighlight,
-    stemLength: meta.stemLength,
-    scale: 1.6,
-    swayKeyframes,
-    centerContent,
-  };
-  let flower: React.ReactNode;
-  switch (meta.flower) {
-    case "sunflower":
-      flower = <SunflowerPainterly {...flowerCommon} />;
-      break;
-    case "cherryBlossom":
-      flower = <CherryBlossomPainterly {...flowerCommon} />;
-      break;
-    case "lotus":
-      flower = <LotusPainterly {...flowerCommon} />;
-      break;
-  }
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-      {flower}
-      <div style={{ fontSize: 28, fontWeight: 700, color: "var(--fg)", marginTop: 8 }}>
-        {meta.label}
-      </div>
-    </div>
-  );
-}
-
-function displayMeta(game: LobbyGame): {
-  label: string;
-  emoji: string;
-  flower: "sunflower" | "cherryBlossom" | "lotus";
-  petalColor: string;
-  petalHighlight: string;
-  stemLength: number;
-} {
-  if (game === "word") {
-    return {
-      label: "WordHive",
-      emoji: "🐝",
-      flower: "sunflower",
-      petalColor: "#f5b400",
-      petalHighlight: "#3a2410",
-      // Sunflower stays the hero plant — clearly the tallest on TV.
-      stemLength: 280,
-    };
-  }
-  if (game === "math") {
-    return {
-      label: "MathHive",
-      emoji: "🧮",
-      flower: "cherryBlossom",
-      petalColor: "#f7a8c4",
-      petalHighlight: "#7a2e4a",
-      stemLength: 200,
-    };
-  }
-  return {
-    label: "Pollinart",
-    emoji: "🎨",
-    flower: "lotus",
-    petalColor: "#f7a8c4",
-    petalHighlight: "#7a2e4a",
-    stemLength: 175,
-  };
 }
