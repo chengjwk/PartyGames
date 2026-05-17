@@ -20,7 +20,9 @@ import SoundUnlockPrompt from "../components/SoundUnlockPrompt";
 import PausedOverlay from "../components/PausedOverlay";
 import GameMenu from "../components/GameMenu";
 import DrawingReplay from "../components/DrawingReplay";
-import type { PublicGameState } from "../shared/types";
+import Fireworks from "../components/Fireworks";
+import { sounds } from "../lib/sounds";
+import type { Player, PublicGameState } from "../shared/types";
 import type {
   ChainRevealed,
   PollinartComplexity,
@@ -597,54 +599,116 @@ function ResultsView({
     .map((p) => ({ p, score: state.totalScores[p.id] ?? 0 }))
     .sort((a, b) => b.score - a.score);
   const reactions = state.reactionsSummary;
+  const winner = sorted[0];
+  // Fire the fanfare once when FINAL_RESULTS first paints. SoundUnlock
+  // prompt already nudged the host to unlock audio at lobby time;
+  // sounds module is a no-op until the context is running.
+  const fanfareFiredRef = useRef(false);
+  useEffect(() => {
+    if (!final) return;
+    if (fanfareFiredRef.current) return;
+    fanfareFiredRef.current = true;
+    sounds.fanfare();
+  }, [final]);
   return (
-    <main style={{ minHeight: "100dvh", padding: "48px 64px", display: "flex", flexDirection: "column", gap: 24 }}>
-      <h1 style={{ margin: 0, color: ACCENT, fontSize: 64 }}>{title}</h1>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: final && reactions ? "minmax(0, 1fr) minmax(0, 1.2fr)" : "1fr",
-          gap: 32,
-          alignItems: "start",
-        }}
-      >
-        <ol
+    <>
+      {final && <Fireworks />}
+      <main style={{ minHeight: "100dvh", padding: "48px 64px", display: "flex", flexDirection: "column", gap: 24 }}>
+        <h1 style={{ margin: 0, color: ACCENT, fontSize: 64 }}>{title}</h1>
+        {final && winner && (
+          <BigWinnerCard player={winner.p} score={winner.score} />
+        )}
+        <div
           style={{
-            listStyle: "none",
-            padding: 0,
-            margin: 0,
             display: "grid",
-            gap: 12,
+            gridTemplateColumns: final && reactions ? "minmax(0, 1fr) minmax(0, 1.2fr)" : "1fr",
+            gap: 32,
+            alignItems: "start",
           }}
         >
-          {sorted.map(({ p, score }, idx) => (
-            <li
-              key={p.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 16,
-                padding: "14px 20px",
-                background:
-                  idx === 0 && final ? "rgba(245, 180, 0, 0.25)" : "var(--bg-elev)",
-                borderRadius: 12,
-                border: "1px solid var(--border)",
-                fontSize: 28,
-                opacity: p.connected ? 1 : 0.5,
-              }}
-            >
-              <strong style={{ width: 32, textAlign: "center" }}>{idx + 1}</strong>
-              <Avatar id={p.avatar} size={56} />
-              <span style={{ flex: 1 }}>{p.name}</span>
-              <strong>{score}</strong>
-            </li>
-          ))}
-        </ol>
-        {final && reactions && reactions.topDrawings.length > 0 && (
-          <BigMostLoved state={state} reactions={reactions} />
-        )}
+          <ol
+            style={{
+              listStyle: "none",
+              padding: 0,
+              margin: 0,
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            {sorted.map(({ p, score }, idx) => (
+              <li
+                key={p.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
+                  padding: "14px 20px",
+                  background:
+                    idx === 0 && final ? "rgba(245, 180, 0, 0.25)" : "var(--bg-elev)",
+                  borderRadius: 12,
+                  border: "1px solid var(--border)",
+                  fontSize: 28,
+                  opacity: p.connected ? 1 : 0.5,
+                }}
+              >
+                <strong style={{ width: 40, textAlign: "center" }}>
+                  {idx === 0 && final ? "🏆" : idx + 1}
+                </strong>
+                <Avatar id={p.avatar} size={56} />
+                <span style={{ flex: 1 }}>{p.name}</span>
+                <strong>{score}</strong>
+              </li>
+            ))}
+          </ol>
+          {final && reactions && reactions.topDrawings.length > 0 && (
+            <BigMostLoved state={state} reactions={reactions} />
+          )}
+        </div>
+      </main>
+    </>
+  );
+}
+
+// TV-sized winner spotlight: trophy and copy on the left, oversized
+// avatar pinned on the right per design ask.
+function BigWinnerCard({ player, score }: { player: Player; score: number }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 32,
+        padding: "28px 36px",
+        borderRadius: 24,
+        background:
+          "linear-gradient(135deg, rgba(245,180,0,0.36), rgba(245,180,0,0.12))",
+        border: "1px solid rgba(245,180,0,0.6)",
+        boxShadow: "0 12px 48px rgba(245,180,0,0.22)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 120,
+          lineHeight: 1,
+          filter: "drop-shadow(0 4px 8px rgba(0,0,0,0.35))",
+        }}
+        aria-hidden
+      >
+        🏆
       </div>
-    </main>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ color: "var(--muted)", fontSize: 22, letterSpacing: 2 }}>
+          WINNER
+        </div>
+        <div style={{ fontSize: 56, fontWeight: 800, color: "var(--fg)", lineHeight: 1.1 }}>
+          {player.name}
+        </div>
+        <div style={{ color: ACCENT, fontSize: 36, fontWeight: 700, marginTop: 6 }}>
+          {score} pts
+        </div>
+      </div>
+      <Avatar id={player.avatar} size={220} />
+    </div>
   );
 }
 

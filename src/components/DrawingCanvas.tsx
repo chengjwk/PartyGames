@@ -38,10 +38,12 @@ const WIDTHS: Array<{ label: string; w: number }> = [
   { label: "fat", w: 22 },
 ];
 
-// How early (ms) before the server's deadline we fire an auto-submit
-// — covers the WebSocket round-trip so our submission lands before
-// the server's own timeout falls back to an empty auto-fill.
-const AUTOSUBMIT_LEAD_MS = 600;
+// How early (ms) before the server's deadline we fire an auto-submit.
+// Covers the WebSocket round-trip + a comfort margin so the submission
+// lands before the server's own timeout falls back to an empty
+// auto-fill. Slow phone networks would benefit from a wider margin —
+// 1s buys us that without being noticeable to drawers.
+const AUTOSUBMIT_LEAD_MS = 1000;
 
 type Tool = "pen" | "eraser" | "fill";
 
@@ -135,7 +137,17 @@ export default function DrawingCanvas({
       drawMarkOnCtx(ctx, activeRef.current, scale, CANVAS_BG, pxSize, dpr);
   }, [strokes, pxSize]);
 
-  // Auto-submit right before the server's deadline.
+  // Auto-submit right before the server's deadline. We deliberately
+  // route `onSubmit` through a ref instead of taking it as a dep — the
+  // parent re-creates its inline `onSubmit` on every WebSocket state
+  // update, which would otherwise teardown + re-arm this timer over
+  // and over and could lose the firing edge if updates flood in the
+  // final tick. With the ref, the timer is anchored on `autoSubmitAt`
+  // alone, which only changes on phase / pause-resume transitions.
+  const onSubmitRef = useRef(onSubmit);
+  useEffect(() => {
+    onSubmitRef.current = onSubmit;
+  }, [onSubmit]);
   useEffect(() => {
     if (autoSubmitAt == null) return;
     if (submittedRef.current) return;
@@ -148,10 +160,10 @@ export default function DrawingCanvas({
         activeRef.current && activeRef.current.points.length > 0
           ? [...strokesRef.current, activeRef.current]
           : strokesRef.current;
-      onSubmit({ strokes: final });
+      onSubmitRef.current({ strokes: final });
     }, delay);
     return () => clearTimeout(id);
-  }, [autoSubmitAt, onSubmit]);
+  }, [autoSubmitAt]);
 
   const eventToPoint = useCallback(
     (e: PointerEvent | React.PointerEvent): { x: number; y: number } => {

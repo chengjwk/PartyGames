@@ -38,8 +38,7 @@ import type {
 } from "../src/shared/pollinart-types";
 import {
   buildMixedDecks,
-  dealChoices,
-  tierMixForCount,
+  dealMixedChoices,
 } from "../src/data/pollinart-words";
 
 const COUNTDOWN_MS = 3000;
@@ -109,8 +108,9 @@ interface InternalChain {
 }
 
 interface PerPlayerRoundState {
-  // The 3 word choices we offered this player at WORD_PICK.
-  pickChoices: string[];
+  // The 2 easy + 1 medium + 1 hard word choices offered to this
+  // player at WORD_PICK. Order is already shuffled by dealMixedChoices.
+  pickChoices: Array<{ word: string; tier: PollinartComplexity }>;
   // The player's chosen starting word (null until they pick or auto).
   pickedWord: string | null;
   // Reactions this player has placed during REVEAL (chainId|stepIndex -> kind).
@@ -428,10 +428,6 @@ export default class PollinartServer implements Party.Server {
     // rotate which one across chains so participation evens out.
     this.chainLength =
       shuffled.length % 2 === 0 ? shuffled.length : shuffled.length - 1;
-    // Assign a difficulty tier per chain. The mix (2 easy / 1 medium /
-    // 1 hard at 4p, scaled at other counts) is shuffled so it isn't
-    // always the same originator stuck with hard.
-    const tiers = shuffle(tierMixForCount(shuffled.length));
     this.chains = shuffled.map((ownerId, k) => {
       // Chain k's player sequence rotates starting at k for chainLength entries.
       const seq: string[] = [];
@@ -444,22 +440,17 @@ export default class PollinartServer implements Party.Server {
         startingWord: null,
         playerSequence: seq,
         steps: [],
-        tier: tiers[k] ?? "easy",
+        // Tentative tier; replaced with the picked option's tier in
+        // handlePickWord / endWordPick. "easy" is a safe default so
+        // the field is never null in the wire snapshot.
+        tier: "easy",
       };
     });
-    // Deal 3 word choices to each connected player from the deck
-    // matching THEIR chain's tier. Each tier deck has an independent
-    // cursor so picks for one tier don't shift cursors for the others.
-    const k = 3;
+    // Every player gets 2 easy + 1 medium + 1 hard choices (shuffled).
+    // dealMixedChoices advances independent cursors per tier in place
+    // so successive players don't see duplicates.
     for (const p of connected) {
-      const ownChain = this.chains.find((c) => c.startedBy === p.id);
-      const tier: PollinartComplexity = ownChain?.tier ?? "easy";
-      const choices = dealChoices(
-        this.decksByTier[tier],
-        this.cursorsByTier[tier],
-        k,
-      );
-      this.cursorsByTier[tier] += k;
+      const choices = dealMixedChoices(this.decksByTier, this.cursorsByTier);
       this.perPlayer.set(p.id, {
         pickChoices: choices,
         pickedWord: null,
@@ -486,8 +477,13 @@ export default class PollinartServer implements Party.Server {
       }
       if (st.pickedWord) {
         chain.startingWord = st.pickedWord;
+        // Tier was set in handlePickWord; defensive lookup in case the
+        // chain still has the default and pickedWord was set elsewhere.
+        const matched = st.pickChoices.find((c) => c.word === st.pickedWord);
+        if (matched) chain.tier = matched.tier;
       } else if (st.pickChoices.length > 0) {
-        chain.startingWord = st.pickChoices[0];
+        chain.startingWord = st.pickChoices[0].word;
+        chain.tier = st.pickChoices[0].tier;
         st.pickedWord = chain.startingWord;
       } else {
         chain.startingWord = "mystery";
@@ -767,10 +763,13 @@ export default class PollinartServer implements Party.Server {
     const chain = this.chains.find((c) => c.startedBy === cid);
     if (!chain) return;
     if (chain.startingWord !== null) return;
-    // Must pick from offered choices.
-    if (!st.pickChoices.includes(msg.word)) return;
-    st.pickedWord = msg.word;
-    chain.startingWord = msg.word;
+    // Must pick from offered choices; resolve tier from the chosen
+    // option so the chain inherits the difficulty the player picked.
+    const matched = st.pickChoices.find((c) => c.word === msg.word);
+    if (!matched) return;
+    st.pickedWord = matched.word;
+    chain.startingWord = matched.word;
+    chain.tier = matched.tier;
     this.broadcastState();
     this.sendPrivate(sender);
     // If every chain has a pick, advance.

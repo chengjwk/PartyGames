@@ -834,29 +834,31 @@ export function buildMixedDecks(): Record<PollinartComplexity, string[]> {
   };
 }
 
-// Decide which tiers to assign across N chains in a round. Target mix
-// is 2 easy / 1 medium / 1 hard at the canonical 4-player game, and
-// scales for other player counts so the round always has variety:
-//   N=2 → [easy, easy]               (no medium/hard — not enough room)
-//   N=3 → [easy, easy, medium]       (skip hard at 3p so chain count = #tiers)
-//   N=4 → [easy, easy, medium, hard] (the spec)
-//   N=5 → [easy, easy, easy, medium, hard]
-//   N=6 → [easy, easy, easy, medium, medium, hard]
-//   N=7 → [easy, easy, easy, easy, medium, medium, hard]
-//   N=8 → [easy, easy, easy, easy, medium, medium, hard, hard]
-// Rough ratio: ~50% easy, ~25% medium, ~25% hard, with floors of 1
-// medium (N≥3) and 1 hard (N≥4) so the points-multiplier chains are
-// always present.
-export function tierMixForCount(n: number): PollinartComplexity[] {
-  if (n <= 0) return [];
-  const easy = Math.max(1, Math.ceil(n * 0.5));
-  const hard = n >= 4 ? Math.max(1, Math.floor(n * 0.25)) : 0;
-  const medium = Math.max(0, n - easy - hard);
-  const out: PollinartComplexity[] = [];
-  for (let i = 0; i < easy; i++) out.push("easy");
-  for (let i = 0; i < medium; i++) out.push("medium");
-  for (let i = 0; i < hard; i++) out.push("hard");
-  return out;
+// Deal a fixed per-player mix of starting-word choices: 2 easy + 1
+// medium + 1 hard, tagged with their tier and shuffled so the easy
+// options aren't always presented first. Every player gets the same
+// mix, so no one is ever stuck with three hard clues, and the tier
+// each chain ends up in is determined by which option the originator
+// picks. Cursors are advanced into the caller's deck records so
+// successive players don't see duplicates.
+export const PICK_CHOICES_MIX: Record<PollinartComplexity, number> = {
+  easy: 2,
+  medium: 1,
+  hard: 1,
+};
+
+export function dealMixedChoices(
+  decks: Record<PollinartComplexity, string[]>,
+  cursors: Record<PollinartComplexity, number>,
+): Array<{ word: string; tier: PollinartComplexity }> {
+  const out: Array<{ word: string; tier: PollinartComplexity }> = [];
+  for (const tier of ["easy", "medium", "hard"] as PollinartComplexity[]) {
+    const k = PICK_CHOICES_MIX[tier];
+    const picked = dealChoices(decks[tier], cursors[tier], k);
+    cursors[tier] += k;
+    for (const w of picked) out.push({ word: w, tier });
+  }
+  return shuffle(out);
 }
 
 // Pick k unique words from the deck starting at `cursor`. Wraps around if

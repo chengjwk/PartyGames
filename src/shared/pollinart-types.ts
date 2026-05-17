@@ -92,10 +92,12 @@ export interface ChainPublic {
   playerSequence: string[];
   // Total number of steps in this chain (== playerSequence.length).
   chainLength: number;
-  // Difficulty tier the chain's starting word was drawn from. Drives
-  // the per-chain points multiplier: easy=1x, medium=1.5x, hard=2x.
-  // Every round is a mix (2 easy / 1 medium / 1 hard for a 4-player
-  // game; scaled for other player counts).
+  // Difficulty tier of the chain's starting word — set once the
+  // originator picks (or auto-picks at WORD_PICK timeout) from their
+  // 2 easy + 1 medium + 1 hard choices. Drives the per-chain points
+  // multiplier: easy=1x, medium=1.5x, hard=2x. Defaults to "easy"
+  // before the originator has picked, which only affects the
+  // pre-pick snapshot — by REVEAL every chain has its true tier set.
   tier: PollinartComplexity;
 }
 
@@ -116,8 +118,11 @@ export type PollinartTask =
   | { kind: "idle" } // not in a round / waiting for everyone to submit
   | {
       kind: "pickWord";
-      // The k-of-3 word choices for THIS player's starting word.
-      choices: string[];
+      // Word choices for THIS player's starting word, each tagged with
+      // its tier. Always served as 2 easy + 1 medium + 1 hard
+      // (shuffled order) so every player gets the same mix and the
+      // tier they end up playing is their choice.
+      choices: Array<{ word: string; tier: PollinartComplexity }>;
       // Server is waiting for a pick until pickEndsAt; after that it
       // auto-picks choices[0] for stragglers.
       pickEndsAt: number;

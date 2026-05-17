@@ -32,6 +32,8 @@ import ThemeToggle from "../components/ThemeToggle";
 import GameMenu from "../components/GameMenu";
 import DrawingCanvas from "../components/DrawingCanvas";
 import DrawingReplay from "../components/DrawingReplay";
+import Fireworks from "../components/Fireworks";
+import { sounds } from "../lib/sounds";
 import type { Player, PublicGameState } from "../shared/types";
 import type {
   ChainRevealed,
@@ -208,7 +210,6 @@ export default function PollinartPlay() {
           state={state}
           privateState={privateState}
           send={send}
-          clientId={clientId}
         />
       );
       break;
@@ -491,12 +492,10 @@ function ActiveStep({
   state,
   privateState,
   send,
-  clientId,
 }: {
   state: PollinartPublicGameState;
   privateState: PollinartPrivateState | null;
   send: (m: PollinartClientMessage) => void;
-  clientId: string;
 }) {
   const task = privateState?.task;
   const phaseEndsAt = state.phaseEndsAt;
@@ -543,36 +542,38 @@ function ActiveStep({
   );
 
   if (task.kind === "pickWord") {
-    // Each chain has a difficulty tier — easy / medium / hard. The
-    // picker sees a badge so they know whether they're playing the
-    // baseline easy lane or one of the bonus-points lanes.
-    const myChain = state.chains?.find((c) => c.startedBy === clientId);
-    const tier = myChain?.tier ?? "easy";
+    // Every player sees 2 easy + 1 medium + 1 hard (shuffled). The
+    // tier you end up playing is YOUR pick — pick a hard for the 2×
+    // points lane or play it safe with easy.
     return (
       <main style={{ padding: "60px 0 24px", display: "flex", flexDirection: "column" }}>
         {header}
         <div style={{ padding: "0 16px" }}>
           <h2 style={{ marginTop: 0 }}>Pick a word to draw</h2>
-          <div style={{ marginTop: 4, marginBottom: 8 }}>
-            <TierBadge tier={tier} />
-          </div>
           <p style={{ color: "var(--muted)", marginTop: 0 }}>
-            Whatever you pick is what you'll draw for your chain.
+            Whatever you pick is what you'll draw — medium pays 1.5× and
+            hard pays 2×.
           </p>
           <div style={{ display: "grid", gap: 12, marginTop: 16 }}>
-            {task.choices.map((w) => (
+            {task.choices.map((c) => (
               <button
-                key={w}
-                onClick={() => send({ type: "pickWord", word: w })}
+                key={c.word}
+                onClick={() => send({ type: "pickWord", word: c.word })}
                 style={{
                   fontSize: 22,
                   padding: 16,
                   background: ACCENT,
                   color: ACCENT_FG,
                   borderRadius: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  textAlign: "left",
                 }}
               >
-                {w}
+                <span style={{ flex: 1 }}>{c.word}</span>
+                <TierBadge tier={c.tier} />
               </button>
             ))}
           </div>
@@ -741,21 +742,35 @@ function GuessView({
 
   // Auto-submit at deadline so a player typing right up to the buzzer
   // still gets their guess in — beats the server's empty auto-fill.
+  // The timer is anchored on `task.phaseEndsAt` alone so frequent
+  // re-renders from incoming state broadcasts don't keep cancelling
+  // and re-arming it (which was eating the firing edge during heavy
+  // late-step traffic). `submit` is routed through a ref + an explicit
+  // submitted flag so we read the latest typed guess and never
+  // double-fire.
+  const submittedRef = useRef(false);
   const submitRef = useRef(submit);
-  submitRef.current = submit;
-  const guessRef = useRef(guess);
-  guessRef.current = guess;
+  useEffect(() => {
+    submitRef.current = submit;
+  }, [submit]);
+  useEffect(() => {
+    if (submitting) submittedRef.current = true;
+  }, [submitting]);
   useEffect(() => {
     if (!task.phaseEndsAt) return;
-    const delay = Math.max(0, task.phaseEndsAt - 600 - Date.now());
+    const delay = Math.max(0, task.phaseEndsAt - 1000 - Date.now());
     const id = setTimeout(() => {
-      // Only auto-fire if we haven't already submitted.
-      if (!submitRef.current) return;
-      // Re-read current guess from ref so a late-typed guess gets sent.
+      if (submittedRef.current) return;
+      submittedRef.current = true;
       submitRef.current();
     }, delay);
     return () => clearTimeout(id);
-  }, [task.phaseEndsAt, task.chainId, task.stepIndex]);
+  }, [task.phaseEndsAt]);
+  // Reset the submitted gate when the step changes (e.g., next chain
+  // step lands the same player back in GuessView).
+  useEffect(() => {
+    submittedRef.current = false;
+  }, [task.chainId, task.stepIndex]);
 
   // Canvas sizing accounts for keyboard inset and ~190px below the
   // canvas for the input bar + header + pass-to text.
@@ -1243,42 +1258,121 @@ function FinalResults({
     .map((p) => ({ p, score: state.totalScores[p.id] ?? 0 }))
     .sort((a, b) => b.score - a.score);
   const reactions = state.reactionsSummary;
+  // Top score wins. On a tie the first player in sorted order is shown
+  // — still gets the trophy. Fanfare fires once when this screen
+  // mounts; relies on the WebAudio unlock listener in lib/sounds.
+  const winner = sortedTotals[0];
+  const fanfareFiredRef = useRef(false);
+  useEffect(() => {
+    if (fanfareFiredRef.current) return;
+    fanfareFiredRef.current = true;
+    sounds.fanfare();
+  }, []);
   return (
-    <main style={{ padding: "60px 16px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
-      <h2 style={{ margin: 0, color: ACCENT }}>Final results</h2>
-      <div style={{ display: "grid", gap: 8 }}>
-        {sortedTotals.map(({ p, score }, idx) => (
-          <div
-            key={p.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "10px 14px",
-              background: idx === 0 ? "rgba(245, 180, 0, 0.18)" : "var(--bg-elev)",
-              borderRadius: 8,
-              border: p.id === clientId ? "1px solid var(--accent)" : "1px solid var(--border)",
-            }}
+    <>
+      <Fireworks />
+      <main style={{ padding: "60px 16px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <h2 style={{ margin: 0, color: ACCENT }}>Final results</h2>
+        {winner && (
+          <WinnerCard
+            player={winner.p}
+            score={winner.score}
+            isMe={winner.p.id === clientId}
+          />
+        )}
+        <div style={{ display: "grid", gap: 8 }}>
+          {sortedTotals.map(({ p, score }, idx) => (
+            <div
+              key={p.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 14px",
+                background: idx === 0 ? "rgba(245, 180, 0, 0.18)" : "var(--bg-elev)",
+                borderRadius: 8,
+                border: p.id === clientId ? "1px solid var(--accent)" : "1px solid var(--border)",
+              }}
+            >
+              <strong style={{ width: 22, textAlign: "center" }}>
+                {idx === 0 ? "🏆" : idx + 1}
+              </strong>
+              <Avatar id={p.avatar} size={36} />
+              <span style={{ flex: 1 }}>{p.name}</span>
+              <strong style={{ minWidth: 50, textAlign: "right" }}>{score}</strong>
+            </div>
+          ))}
+        </div>
+        {reactions && reactions.topDrawings.length > 0 && (
+          <MostLovedOfTheNight state={state} reactions={reactions} />
+        )}
+        {isHost && (
+          <button
+            onClick={() => send({ type: "playAgain" })}
+            style={{ fontSize: 22, padding: 16, marginTop: 12 }}
           >
-            <strong style={{ width: 22, textAlign: "center" }}>{idx + 1}</strong>
-            <Avatar id={p.avatar} size={36} />
-            <span style={{ flex: 1 }}>{p.name}</span>
-            <strong style={{ minWidth: 50, textAlign: "right" }}>{score}</strong>
-          </div>
-        ))}
+            Play again
+          </button>
+        )}
+      </main>
+    </>
+  );
+}
+
+// Winner spotlight card — trophy + big avatar pinned to the right (per
+// design ask). Phone layout keeps the trophy on the left so it reads
+// left-to-right; the big avatar is the visual right-side anchor.
+function WinnerCard({
+  player,
+  score,
+  isMe,
+}: {
+  player: Player;
+  score: number;
+  isMe: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "16px 18px",
+        borderRadius: 16,
+        background:
+          "linear-gradient(135deg, rgba(245,180,0,0.32), rgba(245,180,0,0.12))",
+        border: "1px solid rgba(245,180,0,0.55)",
+        boxShadow: "0 4px 18px rgba(245,180,0,0.18)",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 56,
+          lineHeight: 1,
+          filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.35))",
+        }}
+        aria-hidden
+      >
+        🏆
       </div>
-      {reactions && reactions.topDrawings.length > 0 && (
-        <MostLovedOfTheNight state={state} reactions={reactions} />
-      )}
-      {isHost && (
-        <button
-          onClick={() => send({ type: "playAgain" })}
-          style={{ fontSize: 22, padding: 16, marginTop: 12 }}
-        >
-          Play again
-        </button>
-      )}
-    </main>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ color: "var(--muted)", fontSize: 12 }}>Winner</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: "var(--fg)" }}>
+          {player.name}
+          {isMe && (
+            <span style={{ color: "var(--muted)", fontSize: 14, marginLeft: 6 }}>
+              (you)
+            </span>
+          )}
+        </div>
+        <div style={{ color: ACCENT, fontSize: 18, fontWeight: 700 }}>
+          {score} pts
+        </div>
+      </div>
+      <Avatar id={player.avatar} size={88} />
+    </div>
   );
 }
 
