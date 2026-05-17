@@ -61,8 +61,11 @@ const META: Record<
     label: "Pollinart",
     tagline: "Draw, guess, repeat",
     emoji: "🎨",
-    petalColor: "#f7a8c4",
-    petalEdge: "#7a2e4a",
+    // Reddish-purple lotus variety so the pond reads distinctly
+    // from the cherry blossom's soft pink. (Real-world lotuses
+    // come in this color too — Nelumbo nucifera "Red Diamond" ish.)
+    petalColor: "#b13a78",
+    petalEdge: "#3e0e2a",
     swayKeyframes: "lily-sway-c",
   },
 };
