@@ -164,21 +164,30 @@ export default function GardenPicker({
       ref={wrapperRef}
       style={{
         position: "relative",
-        width: "100%",
+        // Phone path breaks out of the parent <main>'s 20px
+        // horizontal padding so the cherry tree's trunk can hug
+        // the actual screen edge (with the left half of the
+        // canopy cut off). Wide layout stays inset.
+        width: compact ? "calc(100% + 40px)" : "100%",
+        marginLeft: compact ? -20 : "auto",
+        marginRight: compact ? -20 : "auto",
         height: wrapperHeight,
-        // Generous max width on the desktop / TV path; phone fills.
-        maxWidth: compact ? 480 : 1200,
-        margin: "0 auto",
+        maxWidth: compact ? undefined : 1200,
+        overflow: "hidden",
       }}
     >
-      {/* Cherry blossom tree — upper-left anchor. */}
+      {/* Cherry blossom tree — trunk hugs the left screen edge with
+          the left half of the canopy clipped off-screen. The shift
+          is applied via `flowerOffsetX` so only the SVG moves; the
+          label stays anchored to the visible right side. */}
       <PickerSlot
         anchor={compact
-          ? { left: "0%", bottom: "38%", align: "left-bottom" }
-          : { left: "1%", bottom: "10%", align: "left-bottom" }}
+          ? { left: "0%", bottom: "30%", align: "left-bottom" }
+          : { left: "0%", bottom: "10%", align: "left-bottom" }}
         meta={META.math}
         isHost={isHost}
         onPick={() => onPick("math")}
+        flowerOffsetX={compact ? "-50%" : "-30%"}
       >
         {renderCherry(cherryScale)}
       </PickerSlot>
@@ -186,7 +195,7 @@ export default function GardenPicker({
       {/* Sunflower — middle-right standing flower. */}
       <PickerSlot
         anchor={compact
-          ? { right: "0%", bottom: "22%", align: "right-bottom" }
+          ? { right: "5%", bottom: "20%", align: "right-bottom" }
           : { left: "40%", bottom: "12%", align: "center-bottom" }}
         meta={META.word}
         isHost={isHost}
@@ -227,12 +236,17 @@ function PickerSlot({
   meta,
   isHost,
   onPick,
+  flowerOffsetX,
   children,
 }: {
   anchor: Anchor;
   meta: { label: string; tagline: string };
   isHost: boolean;
   onPick: () => void;
+  // Optional horizontal shift applied to the flower SVG only. The
+  // label stays anchored to the slot's original position so it
+  // remains visible even when the SVG is partially off-screen.
+  flowerOffsetX?: string;
   children: ReactNode;
 }) {
   // Translate the anchor into an absolute-position style.
@@ -272,7 +286,24 @@ function PickerSlot({
           transition: "opacity 0.2s",
         }}
       >
-        {children}
+        {flowerOffsetX ? (
+          // Transform-only wrapper for the flower SVG. Doesn't
+          // affect the button's layout box, so the label sits
+          // below the slot's anchor rather than under the
+          // shifted SVG.
+          <div
+            style={{
+              transform: `translateX(${flowerOffsetX})`,
+              // Hint at hardware compositing — keeps the
+              // bloom-in animation smooth on mobile.
+              willChange: "transform",
+            }}
+          >
+            {children}
+          </div>
+        ) : (
+          children
+        )}
         <div
           style={{
             fontSize: 16,
