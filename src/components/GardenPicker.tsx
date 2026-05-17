@@ -179,10 +179,14 @@ export default function GardenPicker({
         overflow: "hidden",
       }}
     >
-      {/* Cherry blossom tree — trunk hugs the left screen edge with
-          the left half of the canopy clipped off-screen. The shift
-          is applied via `flowerOffsetX` so only the SVG moves; the
-          label stays anchored to the visible right side. */}
+      {/* Cherry blossom tree.
+          Phone (compact): trunk hugs the left screen edge with the
+          left half of the canopy clipped off-screen via
+          `flowerOffsetX: -50%`. Label is pulled left so it sits
+          below the hero bloom on the right-lower branch rather
+          than under the full (mostly off-screen) SVG center.
+          Desktop / TV: there's room for the whole tree, so no
+          clip — the full canopy renders. */}
       <PickerSlot
         anchor={compact
           ? { left: "0%", bottom: "30%", align: "left-bottom" }
@@ -190,7 +194,8 @@ export default function GardenPicker({
         meta={META.math}
         isHost={isHost}
         onPick={() => onPick("math")}
-        flowerOffsetX={compact ? "-50%" : "-30%"}
+        flowerOffsetX={compact ? "-50%" : undefined}
+        labelOffsetX={compact ? "-22%" : undefined}
       >
         {renderCherry(cherryScale)}
       </PickerSlot>
@@ -240,6 +245,7 @@ function PickerSlot({
   isHost,
   onPick,
   flowerOffsetX,
+  labelOffsetX,
   children,
 }: {
   anchor: Anchor;
@@ -250,6 +256,9 @@ function PickerSlot({
   // label stays anchored to the slot's original position so it
   // remains visible even when the SVG is partially off-screen.
   flowerOffsetX?: string;
+  // Optional horizontal shift applied to the label only (e.g. to
+  // pull it under the visible portion of a clipped flower).
+  labelOffsetX?: string;
   children: ReactNode;
 }) {
   // Translate the anchor into an absolute-position style.
@@ -307,29 +316,48 @@ function PickerSlot({
         ) : (
           children
         )}
+        {/* Label wrapper. `position: relative` + zIndex bumps the
+            label above any SVG content that overflows its
+            bounding box (e.g. the pond water in the lotus slot
+            extends below the SVG box, which was painting on top
+            of the Pollinart label). Optional `labelOffsetX`
+            nudges the label horizontally — used by the
+            cherry-tree slot to pull the label under the visible
+            (right-side) hero bloom. */}
         <div
           style={{
-            fontSize: 16,
-            fontWeight: 700,
-            color: "var(--fg)",
-            marginTop: 4,
-            textShadow: "0 1px 2px rgba(0,0,0,0.35)",
+            position: "relative",
+            zIndex: 2,
+            transform: labelOffsetX ? `translateX(${labelOffsetX})` : undefined,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
           }}
         >
-          {meta.label}
-        </div>
-        <div
-          style={{
-            fontSize: 11,
-            color: "var(--muted)",
-            textAlign: "center",
-            padding: "0 6px",
-            lineHeight: 1.3,
-            maxWidth: 140,
-            textShadow: "0 1px 2px rgba(0,0,0,0.35)",
-          }}
-        >
-          {meta.tagline}
+          <div
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: "var(--fg)",
+              marginTop: 4,
+              textShadow: "0 1px 2px rgba(0,0,0,0.35)",
+            }}
+          >
+            {meta.label}
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              color: "var(--muted)",
+              textAlign: "center",
+              padding: "0 6px",
+              lineHeight: 1.3,
+              maxWidth: 140,
+              textShadow: "0 1px 2px rgba(0,0,0,0.35)",
+            }}
+          >
+            {meta.tagline}
+          </div>
         </div>
       </button>
     </div>

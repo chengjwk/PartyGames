@@ -58,7 +58,9 @@ export default function CherryTreePainterly({
 
   // Blossom clusters: position relative to the canopy origin
   // (translate to (0, trunkTopY)). Each cluster gets its own bezier
-  // branch from the trunk top.
+  // branch from the trunk top. The right-lower branch (x=95, y=-70)
+  // is omitted from the decorative list because the emoji-bearing
+  // hero bloom now occupies that spot — see below.
   const clusters: Array<{
     branchEndX: number;
     branchEndY: number;
@@ -68,9 +70,18 @@ export default function CherryTreePainterly({
     { branchEndX: -90, branchEndY: -30, clusterR: 56, branchControl: { cx: -50, cy: -30 } },
     { branchEndX: -50, branchEndY: -110, clusterR: 52, branchControl: { cx: -20, cy: -60 } },
     { branchEndX: 30, branchEndY: -130, clusterR: 60, branchControl: { cx: 20, cy: -80 } },
-    { branchEndX: 95, branchEndY: -70, clusterR: 54, branchControl: { cx: 50, cy: -40 } },
     { branchEndX: 75, branchEndY: -160, clusterR: 44, branchControl: { cx: 40, cy: -110 } },
   ];
+  // Where the emoji bloom (and its short branch) lives. Pulled out
+  // of the cluster list so it can be a fully-rendered, larger
+  // blossom + center-disc — the picker hero on the right-lower
+  // branch where the canopy is fully visible even after the trunk
+  // is tucked against the screen edge.
+  const heroBranch = {
+    endX: 95,
+    endY: -70,
+    control: { cx: 50, cy: -40 },
+  };
 
   return (
     <svg
@@ -123,8 +134,17 @@ export default function CherryTreePainterly({
             fill="none"
           />
         ))}
+        {/* Hero branch — drawn slightly chunkier than the decorative
+            ones because it carries the picker bloom. */}
+        <path
+          d={`M 0 0 Q ${heroBranch.control.cx * scale} ${heroBranch.control.cy * scale} ${heroBranch.endX * scale} ${heroBranch.endY * scale}`}
+          stroke="#5a3a1f"
+          strokeWidth={5 * scale}
+          strokeLinecap="round"
+          fill="none"
+        />
 
-        {/* Blossom clusters */}
+        {/* Decorative blossom clusters */}
         {clusters.map((c, i) => (
           <BlossomBunch
             key={`c-${i}`}
@@ -136,11 +156,19 @@ export default function CherryTreePainterly({
           />
         ))}
 
-        {/* Center bloom (where the emoji slot lives) — overlays the
-            middle of the canopy. Slightly larger so the emoji has
-            breathing room. */}
-        <g transform={`translate(0 ${-70 * scale})`}>
-          <BlossomFlower r={CENTER_R * 2} fill={`url(#${blossomGradId})`} edge={petalEdge} />
+        {/* Hero bloom (carries the emoji) — sits at the right-lower
+            branch tip. Bigger than a regular cluster blossom so the
+            emoji has breathing room. */}
+        <g
+          transform={`translate(${heroBranch.endX * scale} ${heroBranch.endY * scale})`}
+        >
+          <BlossomBunch
+            cx={0}
+            cy={0}
+            r={CENTER_R * 3.4}
+            fill={`url(#${blossomGradId})`}
+            edge={petalEdge}
+          />
           <circle
             cx={0}
             cy={0}
