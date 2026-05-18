@@ -980,6 +980,9 @@ function ChainPlayback({
       {revealedPairs.map((pair) => {
         const iAmDrawer =
           pair.drawing.kind === "draw" && pair.drawing.playerId === clientId;
+        const reactionKey = `${chain.id}|${pair.drawIndex}`;
+        const counts =
+          state.roundSummary?.reactions[reactionKey] ?? { heart: 0, bee: 0 };
         return (
           <ChainPairCard
             key={pair.drawIndex}
@@ -992,6 +995,16 @@ function ChainPlayback({
                 chainId: chain.id,
                 guessStepIndex: pair.guess.index,
                 matched,
+              })
+            }
+            canReact={!iAmDrawer}
+            reactionCounts={counts}
+            onReact={(kind) =>
+              send({
+                type: "reactToDrawing",
+                chainId: chain.id,
+                stepIndex: pair.drawIndex,
+                kind,
               })
             }
           />
@@ -1036,12 +1049,17 @@ function SeedCard({
 // One (drawing, guess) pair card. Drawing on top, guess underneath,
 // match badge to the right of the guess. If `canVote` is true the
 // drawer of this pair sees Yes/No buttons; tapping them updates the
-// match verdict.
+// match verdict. If `canReact` is true (everyone except the drawer
+// themselves), heart/bee reaction buttons render alongside their
+// live count.
 export function ChainPairCard({
   pair,
   compact,
   canVote,
   onVote,
+  canReact,
+  reactionCounts,
+  onReact,
 }: {
   pair: {
     drawIndex: number;
@@ -1053,6 +1071,9 @@ export function ChainPairCard({
   compact?: boolean;
   canVote?: boolean;
   onVote?: (matched: boolean) => void;
+  canReact?: boolean;
+  reactionCounts?: { heart: number; bee: number };
+  onReact?: (kind: "heart" | "bee") => void;
 }) {
   if (pair.drawing.kind !== "draw" || pair.guess.kind !== "guess") return null;
   const size = compact
@@ -1141,6 +1162,60 @@ export function ChainPairCard({
             }}
           >
             ✗ No match
+          </button>
+        </div>
+      )}
+      {canReact && onReact && (
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignSelf: "stretch",
+            justifyContent: "center",
+            paddingTop: 4,
+          }}
+        >
+          <button
+            onClick={() => onReact("heart")}
+            aria-label="Love this drawing"
+            style={{
+              flex: 1,
+              padding: "10px 14px",
+              fontSize: 16,
+              background: "var(--bg)",
+              color: "var(--fg)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <span aria-hidden>❤️</span>
+            <span>{reactionCounts?.heart ?? 0}</span>
+          </button>
+          <button
+            onClick={() => onReact("bee")}
+            aria-label="Bee-worthy drawing"
+            style={{
+              flex: 1,
+              padding: "10px 14px",
+              fontSize: 16,
+              background: "var(--bg)",
+              color: "var(--fg)",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              fontWeight: 700,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <span aria-hidden>🐝</span>
+            <span>{reactionCounts?.bee ?? 0}</span>
           </button>
         </div>
       )}

@@ -896,6 +896,22 @@ export default class PollinartServer implements Party.Server {
       });
     }
     this.reactions.set(key, list);
+    // Refresh the aggregated counts on the round summary so the
+    // broadcast carries the new tally to clients live. `applyScoring`
+    // also recomputes from this.reactions, but we don't need to
+    // re-run scoring for a pure reaction — just rebuild the agg map.
+    if (this.roundSummary) {
+      const reactionsAgg: Record<string, { heart: number; bee: number }> = {};
+      for (const [k, l] of this.reactions) {
+        const agg = { heart: 0, bee: 0 };
+        for (const r of l) {
+          if (r.kind === "heart") agg.heart++;
+          else agg.bee++;
+        }
+        reactionsAgg[k] = agg;
+      }
+      this.roundSummary.reactions = reactionsAgg;
+    }
     this.broadcastState();
   }
 
