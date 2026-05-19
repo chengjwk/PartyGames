@@ -9,6 +9,7 @@ import MathPlay from "./routes/MathPlay";
 import PollinartHost from "./routes/PollinartHost";
 import PollinartPlay from "./routes/PollinartPlay";
 import FlowerStyles from "./routes/FlowerStyles";
+import BeePreview from "./routes/BeePreview";
 
 export default function App() {
   return (
@@ -28,6 +29,8 @@ export default function App() {
         {/* Design preview (not linked from the app) — visit
             /flower-styles to compare picker-flower variants. */}
         <Route path="/flower-styles" element={<FlowerStyles />} />
+        {/* Dev preview for the Pollinart stealing-bee animation. */}
+        <Route path="/preview/stealing-bee" element={<BeePreview />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
