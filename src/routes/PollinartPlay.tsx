@@ -33,6 +33,7 @@ import GameMenu from "../components/GameMenu";
 import DrawingCanvas from "../components/DrawingCanvas";
 import DrawingReplay from "../components/DrawingReplay";
 import Fireworks from "../components/Fireworks";
+import StealingBee from "../components/StealingBee";
 import { sounds } from "../lib/sounds";
 import type { Player, PublicGameState } from "../shared/types";
 import type {
@@ -945,6 +946,23 @@ function ChainPlayback({
   clientId: string;
   send: (m: PollinartClientMessage) => void;
 }) {
+  // Stealing-bee animation: when the host advances reveal and a new
+  // drawing pops into view, spawn a bee flying across the screen with
+  // a thumbnail of the newly-revealed drawing. The `key` doubles as
+  // an idempotency token so each (chain, upToStep) only fires once
+  // even if React re-runs the effect.
+  const [bee, setBee] = useState<{ drawing: Drawing; key: string } | null>(null);
+  const lastShownKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (upToStep < 1) return;
+    const key = `${chain.id}|${upToStep}`;
+    if (lastShownKeyRef.current === key) return;
+    lastShownKeyRef.current = key;
+    const step = chain.steps.find((s) => s.index === upToStep - 1);
+    if (!step || step.kind !== "draw") return;
+    setBee({ drawing: step.drawing, key });
+  }, [chain.id, upToStep, chain.steps]);
+
   // Pair the chain's steps as (drawing, guess). Each pair is one
   // round of the telephone game. With our chainLength guaranteed
   // even, every drawing has a matching guess at the next index.
@@ -1008,6 +1026,13 @@ function ChainPlayback({
           />
         );
       })}
+      {bee && (
+        <StealingBee
+          key={bee.key}
+          drawing={bee.drawing}
+          onDone={() => setBee(null)}
+        />
+      )}
     </div>
   );
 }

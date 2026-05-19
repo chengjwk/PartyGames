@@ -21,10 +21,12 @@ import PausedOverlay from "../components/PausedOverlay";
 import GameMenu from "../components/GameMenu";
 import DrawingReplay from "../components/DrawingReplay";
 import Fireworks from "../components/Fireworks";
+import StealingBee from "../components/StealingBee";
 import { sounds } from "../lib/sounds";
 import type { Player, PublicGameState } from "../shared/types";
 import type {
   ChainRevealed,
+  Drawing,
   PollinartComplexity,
   PollinartPublicGameState,
   PollinartServerMessage,
@@ -398,6 +400,21 @@ function BigChainPlayback({
   upToStep: number;
   state: PollinartPublicGameState;
 }) {
+  // Stealing-bee animation — same logic as the phone side. The bee
+  // pops in carrying a thumbnail of the just-revealed drawing each
+  // time the host advances. Bigger thumbnail on the TV.
+  const [bee, setBee] = useState<{ drawing: Drawing; key: string } | null>(null);
+  const lastShownKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (upToStep < 1) return;
+    const key = `${chain.id}|${upToStep}`;
+    if (lastShownKeyRef.current === key) return;
+    lastShownKeyRef.current = key;
+    const step = chain.steps.find((s) => s.index === upToStep - 1);
+    if (!step || step.kind !== "draw") return;
+    setBee({ drawing: step.drawing, key });
+  }, [chain.id, upToStep, chain.steps]);
+
   // Pair up (draw, guess) steps. With even-length chains every drawing
   // has a matching guess at the next index.
   const pairs: Array<{
@@ -437,6 +454,14 @@ function BigChainPlayback({
       {revealed.map((pair) => (
         <BigPairCard key={pair.drawIndex} pair={pair} />
       ))}
+      {bee && (
+        <StealingBee
+          key={bee.key}
+          drawing={bee.drawing}
+          thumbSize={140}
+          onDone={() => setBee(null)}
+        />
+      )}
     </div>
   );
 }
