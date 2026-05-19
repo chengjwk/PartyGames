@@ -113,8 +113,6 @@ interface PerPlayerRoundState {
   pickChoices: Array<{ word: string; tier: PollinartComplexity }>;
   // The player's chosen starting word (null until they pick or auto).
   pickedWord: string | null;
-  // Reactions this player has placed during REVEAL (chainId|stepIndex -> kind).
-  reactions: Map<string, "heart" | "bee">;
   scoreThisRound: number;
   // Total step submissions (for liveStats).
   submitted: number;
@@ -454,7 +452,6 @@ export default class PollinartServer implements Party.Server {
       this.perPlayer.set(p.id, {
         pickChoices: choices,
         pickedWord: null,
-        reactions: new Map(),
         scoreThisRound: 0,
         submitted: 0,
       });
@@ -631,14 +628,14 @@ export default class PollinartServer implements Party.Server {
   private computeReactionsSummary(): PollinartReactionsSummary {
     type Entry = PollinartReactionsSummary["topDrawings"][number];
     const entries: Entry[] = [];
-    const perPlayer: Record<string, { heart: number; bee: number }> = {};
+    const perPlayer: Record<string, number> = {};
     for (const { roundNumber, summary } of this.completedRoundSummaries) {
       for (const chain of summary.chains) {
         for (const step of chain.steps) {
           if (step.kind !== "draw") continue;
           const key = `${chain.id}|${step.index}`;
-          const r = summary.reactions[key] ?? { heart: 0, bee: 0 };
-          if (r.heart === 0 && r.bee === 0) continue;
+          const count = summary.reactions[key] ?? 0;
+          if (count === 0) continue;
           entries.push({
             drawing: step.drawing,
             drawerId: step.playerId,
@@ -646,17 +643,13 @@ export default class PollinartServer implements Party.Server {
             stepIndex: step.index,
             promptedWord: step.promptedWord,
             roundNumber,
-            heart: r.heart,
-            bee: r.bee,
+            count,
           });
-          const tot = perPlayer[step.playerId] ?? { heart: 0, bee: 0 };
-          tot.heart += r.heart;
-          tot.bee += r.bee;
-          perPlayer[step.playerId] = tot;
+          perPlayer[step.playerId] = (perPlayer[step.playerId] ?? 0) + count;
         }
       }
     }
-    entries.sort((a, b) => b.heart + b.bee - (a.heart + a.bee));
+    entries.sort((a, b) => b.count - a.count);
     // Cap at top 5 so the FINAL_RESULTS payload stays bounded.
     return { topDrawings: entries.slice(0, 5), perPlayer };
   }
@@ -733,15 +726,10 @@ export default class PollinartServer implements Party.Server {
       this.totalScores.set(pid, (this.totalScores.get(pid) ?? 0) + total);
       this.lastAppliedContribution.set(pid, total);
     }
-    // Reactions summary.
-    const reactionsAgg: Record<string, { heart: number; bee: number }> = {};
+    // Reactions summary — single ❤️ count per (chain, step).
+    const reactionsAgg: Record<string, number> = {};
     for (const [key, list] of this.reactions) {
-      const agg = { heart: 0, bee: 0 };
-      for (const r of list) {
-        if (r.kind === "heart") agg.heart++;
-        else agg.bee++;
-      }
-      reactionsAgg[key] = agg;
+      reactionsAgg[key] = list.length;
     }
     this.roundSummary = {
       chains: summaryChains,
@@ -870,45 +858,32 @@ export default class PollinartServer implements Party.Server {
 
   private handleReaction(
     sender: Party.Connection,
-    msg: { chainId: string; stepIndex: number; kind: "heart" | "bee" },
+    msg: { chainId: string; stepIndex: number },
   ) {
     if (this.phase !== "REVEAL" && this.phase !== "ROUND_RESULTS") return;
     const cid = this.connToClient.get(sender.id);
     if (!cid) return;
     const key = `${msg.chainId}|${msg.stepIndex}`;
     const list = this.reactions.get(key) ?? [];
-    // Toggle: if this player already placed this kind here, remove it;
-    // else replace any prior reaction by this player for this step.
+    // Toggle: if this player already reacted to this drawing, unlike it;
+    // otherwise add their like.
     const existingIdx = list.findIndex((r) => r.byPlayerId === cid);
     if (existingIdx >= 0) {
-      const existing = list[existingIdx];
-      if (existing.kind === msg.kind) {
-        list.splice(existingIdx, 1);
-      } else {
-        existing.kind = msg.kind;
-      }
+      list.splice(existingIdx, 1);
     } else {
       list.push({
         chainId: msg.chainId,
         stepIndex: msg.stepIndex,
-        kind: msg.kind,
         byPlayerId: cid,
       });
     }
     this.reactions.set(key, list);
-    // Refresh the aggregated counts on the round summary so the
-    // broadcast carries the new tally to clients live. `applyScoring`
-    // also recomputes from this.reactions, but we don't need to
-    // re-run scoring for a pure reaction — just rebuild the agg map.
+    // Refresh the aggregate so the broadcast carries the new tally
+    // without re-running the full scoring pass.
     if (this.roundSummary) {
-      const reactionsAgg: Record<string, { heart: number; bee: number }> = {};
+      const reactionsAgg: Record<string, number> = {};
       for (const [k, l] of this.reactions) {
-        const agg = { heart: 0, bee: 0 };
-        for (const r of l) {
-          if (r.kind === "heart") agg.heart++;
-          else agg.bee++;
-        }
-        reactionsAgg[k] = agg;
+        reactionsAgg[k] = l.length;
       }
       this.roundSummary.reactions = reactionsAgg;
     }

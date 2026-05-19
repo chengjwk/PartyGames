@@ -981,8 +981,7 @@ function ChainPlayback({
         const iAmDrawer =
           pair.drawing.kind === "draw" && pair.drawing.playerId === clientId;
         const reactionKey = `${chain.id}|${pair.drawIndex}`;
-        const counts =
-          state.roundSummary?.reactions[reactionKey] ?? { heart: 0, bee: 0 };
+        const count = state.roundSummary?.reactions[reactionKey] ?? 0;
         return (
           <ChainPairCard
             key={pair.drawIndex}
@@ -998,13 +997,12 @@ function ChainPlayback({
               })
             }
             canReact={!iAmDrawer}
-            reactionCounts={counts}
-            onReact={(kind) =>
+            reactionCount={count}
+            onReact={() =>
               send({
                 type: "reactToDrawing",
                 chainId: chain.id,
                 stepIndex: pair.drawIndex,
-                kind,
               })
             }
           />
@@ -1050,15 +1048,15 @@ function SeedCard({
 // match badge to the right of the guess. If `canVote` is true the
 // drawer of this pair sees Yes/No buttons; tapping them updates the
 // match verdict. If `canReact` is true (everyone except the drawer
-// themselves), heart/bee reaction buttons render alongside their
-// live count.
+// themselves), a single ❤️ like button renders alongside its live
+// count.
 export function ChainPairCard({
   pair,
   compact,
   canVote,
   onVote,
   canReact,
-  reactionCounts,
+  reactionCount,
   onReact,
 }: {
   pair: {
@@ -1072,8 +1070,8 @@ export function ChainPairCard({
   canVote?: boolean;
   onVote?: (matched: boolean) => void;
   canReact?: boolean;
-  reactionCounts?: { heart: number; bee: number };
-  onReact?: (kind: "heart" | "bee") => void;
+  reactionCount?: number;
+  onReact?: () => void;
 }) {
   if (pair.drawing.kind !== "draw" || pair.guess.kind !== "guess") return null;
   const size = compact
@@ -1169,15 +1167,14 @@ export function ChainPairCard({
         <div
           style={{
             display: "flex",
-            gap: 8,
             alignSelf: "stretch",
             justifyContent: "center",
             paddingTop: 4,
           }}
         >
           <button
-            onClick={() => onReact("heart")}
-            aria-label="Love this drawing"
+            onClick={() => onReact()}
+            aria-label="Like this drawing"
             style={{
               flex: 1,
               padding: "10px 14px",
@@ -1194,28 +1191,7 @@ export function ChainPairCard({
             }}
           >
             <span aria-hidden>❤️</span>
-            <span>{reactionCounts?.heart ?? 0}</span>
-          </button>
-          <button
-            onClick={() => onReact("bee")}
-            aria-label="Bee-worthy drawing"
-            style={{
-              flex: 1,
-              padding: "10px 14px",
-              fontSize: 16,
-              background: "var(--bg)",
-              color: "var(--fg)",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              fontWeight: 700,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-            }}
-          >
-            <span aria-hidden>🐝</span>
-            <span>{reactionCounts?.bee ?? 0}</span>
+            <span>{reactionCount ?? 0}</span>
           </button>
         </div>
       )}
@@ -1469,23 +1445,20 @@ function MostLovedThisRound({
     drawing: Drawing;
     drawerId: string;
     promptedWord: string;
-    heart: number;
-    bee: number;
+    count: number;
   };
   let best: Top | null = null;
   for (const chain of summary.chains) {
     for (const step of chain.steps) {
       if (step.kind !== "draw") continue;
-      const r = summary.reactions[`${chain.id}|${step.index}`];
-      if (!r || r.heart + r.bee === 0) continue;
-      const total = r.heart + r.bee;
-      if (!best || total > best.heart + best.bee) {
+      const count = summary.reactions[`${chain.id}|${step.index}`] ?? 0;
+      if (count === 0) continue;
+      if (!best || count > best.count) {
         best = {
           drawing: step.drawing,
           drawerId: step.playerId,
           promptedWord: step.promptedWord,
-          heart: r.heart,
-          bee: r.bee,
+          count,
         };
       }
     }
@@ -1524,9 +1497,7 @@ function MostLovedThisRound({
         <strong style={{ flex: 1 }}>
           {drawer?.name ?? "someone"}'s "{best.promptedWord}"
         </strong>
-        <span style={{ color: "var(--muted)" }}>
-          ❤️ {best.heart} · 🐝 {best.bee}
-        </span>
+        <span style={{ color: "var(--muted)" }}>❤️ {best.count}</span>
       </div>
     </section>
   );
@@ -1544,14 +1515,9 @@ function MostLovedOfTheNight({
 }) {
   const top3 = reactions.topDrawings.slice(0, 3);
   const perPlayerEntries = Object.entries(reactions.perPlayer)
-    .map(([pid, counts]) => ({
-      pid,
-      heart: counts.heart,
-      bee: counts.bee,
-      total: counts.heart + counts.bee,
-    }))
-    .filter((e) => e.total > 0)
-    .sort((a, b) => b.total - a.total);
+    .map(([pid, count]) => ({ pid, count }))
+    .filter((e) => e.count > 0)
+    .sort((a, b) => b.count - a.count);
   const size = Math.min(window.innerWidth - 80, 220);
   return (
     <section
@@ -1595,7 +1561,7 @@ function MostLovedOfTheNight({
                 {drawer?.name ?? "someone"} — "{t.promptedWord}"
               </div>
               <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                ❤️ {t.heart} · 🐝 {t.bee}{" "}
+                ❤️ {t.count}{" "}
                 <span style={{ opacity: 0.6 }}>(R{t.roundNumber})</span>
               </div>
             </div>
@@ -1631,9 +1597,7 @@ function MostLovedOfTheNight({
                 >
                   <Avatar id={p.avatar} size={22} />
                   <span style={{ flex: 1 }}>{p.name}</span>
-                  <span style={{ color: "var(--muted)" }}>
-                    ❤️ {e.heart} · 🐝 {e.bee}
-                  </span>
+                  <span style={{ color: "var(--muted)" }}>❤️ {e.count}</span>
                 </li>
               );
             })}

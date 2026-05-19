@@ -721,9 +721,9 @@ function BigMostLoved({
 }) {
   const top3 = reactions.topDrawings.slice(0, 3);
   const perPlayerEntries = Object.entries(reactions.perPlayer)
-    .map(([pid, c]) => ({ pid, heart: c.heart, bee: c.bee, total: c.heart + c.bee }))
-    .filter((e) => e.total > 0)
-    .sort((a, b) => b.total - a.total);
+    .map(([pid, count]) => ({ pid, count }))
+    .filter((e) => e.count > 0)
+    .sort((a, b) => b.count - a.count);
   return (
     <section
       style={{
@@ -763,7 +763,7 @@ function BigMostLoved({
                 {drawer?.name ?? "someone"} — "{t.promptedWord}"
               </div>
               <div style={{ fontSize: 16, color: "var(--muted)" }}>
-                ❤️ {t.heart} · 🐝 {t.bee}{" "}
+                ❤️ {t.count}{" "}
                 <span style={{ opacity: 0.6 }}>(R{t.roundNumber})</span>
               </div>
             </div>
@@ -799,9 +799,7 @@ function BigMostLoved({
                 >
                   <Avatar id={p.avatar} size={32} />
                   <span style={{ flex: 1 }}>{p.name}</span>
-                  <span style={{ color: "var(--muted)" }}>
-                    ❤️ {e.heart} · 🐝 {e.bee}
-                  </span>
+                  <span style={{ color: "var(--muted)" }}>❤️ {e.count}</span>
                 </li>
               );
             })}

@@ -164,11 +164,12 @@ export interface PollinartLiveStat {
   scoreThisRound: number;
 }
 
-// Heart / bee reactions added during REVEAL. Pure cosmetic.
+// Per-drawing reactions added during REVEAL. Pure cosmetic — every
+// reaction is a single ❤️ "like." (Earlier versions tracked a second
+// kind 🐝 too; we collapsed back to one to keep the action simple.)
 export interface DrawingReaction {
   chainId: string;
   stepIndex: number;
-  kind: "heart" | "bee";
   byPlayerId: string;
 }
 
@@ -176,14 +177,15 @@ export interface PollinartRoundSummary {
   chains: ChainRevealed[];
   // Total points earned this round per player (sum across all chains).
   perPlayer: Record<string, number>;
-  // Aggregated reaction tally for the round (chainId+stepIndex -> counts).
-  reactions: Record<string, { heart: number; bee: number }>;
+  // Aggregated ❤️ reaction tally for the round, keyed by
+  // chainId+stepIndex.
+  reactions: Record<string, number>;
 }
 
 // Cross-round reaction aggregate, populated at FINAL_RESULTS.
-// `topDrawings` is sorted descending by (heart + bee) total — the
-// "most-loved drawing of the night" lineup. `perPlayer` accumulates
-// every reaction received on a player's drawings across the game.
+// `topDrawings` is sorted descending by ❤️ count — the "most-loved
+// drawing of the night" lineup. `perPlayer` accumulates every
+// reaction received on a player's drawings across the game.
 export interface PollinartReactionsSummary {
   topDrawings: Array<{
     drawing: Drawing;
@@ -192,10 +194,9 @@ export interface PollinartReactionsSummary {
     stepIndex: number;
     promptedWord: string;
     roundNumber: number;
-    heart: number;
-    bee: number;
+    count: number;
   }>;
-  perPlayer: Record<string, { heart: number; bee: number }>;
+  perPlayer: Record<string, number>;
 }
 
 export interface PollinartPublicGameState {
@@ -262,7 +263,7 @@ export type PollinartClientMessage =
   | { type: "pickWord"; word: string }
   | { type: "submitDrawing"; chainId: string; stepIndex: number; drawing: Drawing }
   | { type: "submitGuess"; chainId: string; stepIndex: number; guess: string }
-  | { type: "reactToDrawing"; chainId: string; stepIndex: number; kind: "heart" | "bee" }
+  | { type: "reactToDrawing"; chainId: string; stepIndex: number }
   // Drawer's verdict on the guess made of their drawing during reveal.
   // `guessStepIndex` is the index of the GUESS step being rated.
   | { type: "ratePair"; chainId: string; guessStepIndex: number; matched: boolean }
