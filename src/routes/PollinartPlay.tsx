@@ -741,6 +741,19 @@ function GuessView({
     setSubmitting(false);
   }, [task.chainId, task.stepIndex]);
 
+  // Stealing-bee on guess phase entrance — a bee buzzes across the
+  // screen carrying the drawing the player is about to guess. Pure
+  // overlay (pointer-events disabled), so typing/tapping is never
+  // blocked. Snappier (1s) than the reveal version so it doesn't eat
+  // the player's input window.
+  const [bee, setBee] = useState<{ drawing: Drawing; key: string } | null>(
+    null,
+  );
+  useEffect(() => {
+    const key = `${task.chainId}|${task.stepIndex}`;
+    setBee({ drawing: task.drawing, key });
+  }, [task.chainId, task.stepIndex, task.drawing]);
+
   // Auto-submit at deadline so a player typing right up to the buzzer
   // still gets their guess in — beats the server's empty auto-fill.
   // The timer is anchored on `task.phaseEndsAt` alone so frequent
@@ -849,6 +862,14 @@ function GuessView({
           Send
         </button>
       </div>
+      {bee && (
+        <StealingBee
+          key={bee.key}
+          drawing={bee.drawing}
+          durationMs={1000}
+          onDone={() => setBee(null)}
+        />
+      )}
     </main>
   );
 }

@@ -122,6 +122,8 @@ const SAMPLES: Array<{ label: string; drawing: Drawing }> = [
 export default function BeePreview() {
   const [bee, setBee] = useState<{ drawing: Drawing; key: string } | null>(null);
   const [thumbSize, setThumbSize] = useState<56 | 140>(56);
+  // 1000 = mid-game (guess phase entrance); 1600 = reveal walkthrough.
+  const [durationMs, setDurationMs] = useState<1000 | 1600>(1600);
   // Monotonic counter so each spawn gets a fresh key even if the user
   // re-taps the same sample.
   const [serial, setSerial] = useState(0);
@@ -160,6 +162,27 @@ export default function BeePreview() {
         <strong style={{ marginRight: 4 }}>Thumb size:</strong>
         <SizeBtn label="Phone (56)" active={thumbSize === 56} onClick={() => setThumbSize(56)} />
         <SizeBtn label="TV (140)" active={thumbSize === 140} onClick={() => setThumbSize(140)} />
+      </section>
+
+      <section
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <strong style={{ marginRight: 4 }}>Duration:</strong>
+        <SizeBtn
+          label="Snappy (1.0s — mid-game)"
+          active={durationMs === 1000}
+          onClick={() => setDurationMs(1000)}
+        />
+        <SizeBtn
+          label="Leisurely (1.6s — reveal)"
+          active={durationMs === 1600}
+          onClick={() => setDurationMs(1600)}
+        />
       </section>
 
       <section
@@ -204,6 +227,7 @@ export default function BeePreview() {
           key={bee.key}
           drawing={bee.drawing}
           thumbSize={thumbSize}
+          durationMs={durationMs}
           onDone={() => setBee(null)}
         />
       )}

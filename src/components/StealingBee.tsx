@@ -17,22 +17,25 @@ interface StealingBeeProps {
   // Pixel size of the carried drawing thumbnail. Defaults to a
   // phone-friendly 56; bump up for the TV.
   thumbSize?: number;
+  // Total flight duration. Defaults to a leisurely 1.6s for reveal;
+  // tune down (~1000) for mid-game transitions where flight time
+  // eats into the player's input window.
+  durationMs?: number;
   // Fires once the animation completes so the caller can unmount.
   onDone: () => void;
 }
 
-const DURATION_MS = 1600;
-
 export default function StealingBee({
   drawing,
   thumbSize = 56,
+  durationMs = 1600,
   onDone,
 }: StealingBeeProps) {
   useEffect(() => {
     // Audio cue — buzz once on arrival. Plays through the shared
     // sounds module; no-op when the audio context is suspended.
     sounds.beeIn();
-    const t = setTimeout(onDone, DURATION_MS);
+    const t = setTimeout(onDone, durationMs);
     return () => clearTimeout(t);
     // onDone is captured at mount intentionally — caller should
     // pass a stable ref or rely on the key to remount.
@@ -81,7 +84,7 @@ export default function StealingBee({
           position: "absolute",
           left: 0,
           top: 0,
-          animation: `steal-bee-fly ${DURATION_MS}ms ease-in-out forwards`,
+          animation: `steal-bee-fly ${durationMs}ms ease-in-out forwards`,
         }}
       >
         {/* Inner transform: gentle bob layered onto the flight. */}
