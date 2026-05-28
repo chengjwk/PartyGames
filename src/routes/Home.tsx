@@ -18,7 +18,7 @@ export default function Home() {
   const start = () => nav(`/host/${generateRoomCode()}`);
   return (
     <>
-      <GardenBackground />
+      <GardenBackground variant="lush" />
       <FullscreenButton />
       <ThemeToggle />
       <main

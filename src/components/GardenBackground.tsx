@@ -63,10 +63,23 @@ const STARS: Array<{ x: number; y: number; r: number; o: number }> = (() => {
   return out;
 })();
 
-export default function GardenBackground() {
+// `simple` = sky + hills + grass + flowers (no extra ornaments).
+// `lush`   = simple + cherry blossom trees + pond + duck + bushes.
+// Default is simple so any page that ALSO renders a GardenPicker
+// (lobby + game pages) doesn't end up with a duplicate tree/pond
+// fighting the picker for attention. Home opts in to lush for the
+// fuller-garden feel.
+type GardenVariant = "simple" | "lush";
+
+export default function GardenBackground({
+  variant = "simple",
+}: {
+  variant?: GardenVariant;
+} = {}) {
   const [theme] = useTheme();
   const isNight = theme === "dark";
   const flowers = isNight ? NIGHT_FLOWERS : DAY_FLOWERS;
+  const lush = variant === "lush";
 
   return (
     <div
@@ -175,23 +188,31 @@ export default function GardenBackground() {
           fill={isNight ? "#030a05" : "#214f1c"}
         />
 
-        {/* Bushes scattered between the foreground flowers — give the
-            scene more layered greenery than a flat lawn. */}
-        {BUSHES.map((b, i) => (
-          <Bush key={i} x={b.x} y={b.y} scale={b.scale} isNight={isNight} />
-        ))}
-
-        {/* Cherry blossom tree — silhouette in the mid-far ground on
-            the left so it doesn't crowd the foreground flowers. */}
-        <CherryTree x={170} y={830} scale={1.1} isNight={isNight} />
-        {/* Smaller, paler cherry tree further back on the right for
-            atmospheric depth. */}
-        <CherryTree x={1320} y={770} scale={0.7} isNight={isNight} fade />
-
-        {/* Pond on the right with a duck floating by. The pond sits
-            between the front grass and the foreground flowers. */}
-        <Pond cx={1180} cy={940} rx={210} ry={36} isNight={isNight} />
-        <Duck baseX={1100} baseY={928} isNight={isNight} />
+        {/* Lush ornaments — only on pages that opt in via
+            variant="lush" (Home today). On the lobby + game pages
+            the GardenPicker is the visual centerpiece, so we keep
+            the BG simple to avoid a duplicate tree / pond.
+            x positions are clamped to ~500..1100 so they stay inside
+            the central band that survives `xMidYMid slice` cropping
+            on a portrait phone. */}
+        {lush && (
+          <>
+            {BUSHES.map((b, i) => (
+              <Bush key={i} x={b.x} y={b.y} scale={b.scale} isNight={isNight} />
+            ))}
+            {/* Foreground cherry tree — centered enough to be visible
+                on phone, large enough to anchor the scene. */}
+            <CherryTree x={520} y={835} scale={1.15} isNight={isNight} />
+            {/* Background cherry tree on the right for depth. Same
+                solid palette as the foreground one — no fade — so it
+                reads as a painted second tree rather than a ghost. */}
+            <CherryTree x={1080} y={790} scale={0.85} isNight={isNight} />
+            {/* Pond with the floating duck, slightly off-center so
+                the pond doesn't sit dead under the foreground tree. */}
+            <Pond cx={830} cy={940} rx={210} ry={36} isNight={isNight} />
+            <Duck baseX={770} baseY={928} isNight={isNight} />
+          </>
+        )}
 
         {/* Grass blades silhouetted */}
         {GRASS_BLADES.map((g, i) => (
@@ -215,11 +236,14 @@ export default function GardenBackground() {
 // Lightly scattered bushes — small ellipse clusters with a darker
 // outline rim. Three-circle cluster reads as a single bush from
 // distance.
+// Bushes tucked into the centrally-visible x band (~500..1100) so
+// portrait phones don't crop them at the edges. Two on each side of
+// the foreground cherry tree.
 const BUSHES: Array<{ x: number; y: number; scale: number }> = [
-  { x: 540, y: 935, scale: 1.0 },
-  { x: 880, y: 928, scale: 0.7 },
-  { x: 1500, y: 930, scale: 0.85 },
-  { x: 60, y: 935, scale: 0.9 },
+  { x: 600, y: 935, scale: 1.0 },
+  { x: 720, y: 942, scale: 0.7 },
+  { x: 980, y: 938, scale: 0.85 },
+  { x: 1050, y: 930, scale: 0.9 },
 ];
 
 function Bush({
@@ -240,15 +264,9 @@ function Bush({
       <ellipse cx={-22} cy={0} rx={26} ry={16} fill={body} />
       <ellipse cx={20} cy={2} rx={28} ry={18} fill={body} />
       <ellipse cx={0} cy={-10} rx={32} ry={20} fill={body} />
-      {/* Top highlight to suggest sun-side lighting. */}
-      <ellipse
-        cx={-4}
-        cy={-15}
-        rx={14}
-        ry={6}
-        fill={hi}
-        opacity={isNight ? 0.55 : 0.8}
-      />
+      {/* Top highlight to suggest sun-side lighting — fully opaque so
+          the bush reads as a solid silhouette rather than a wash. */}
+      <ellipse cx={-4} cy={-15} rx={14} ry={6} fill={hi} />
     </g>
   );
 }
@@ -263,26 +281,19 @@ function CherryTree({
   y,
   scale,
   isNight,
-  fade,
 }: {
   x: number;
   y: number;
   scale: number;
   isNight: boolean;
-  // Mid-distance tree gets a slight desaturation so the foreground
-  // tree pops.
-  fade?: boolean;
 }) {
   const trunk = isNight ? "#1a1108" : "#5a3a1f";
   const trunkEdge = isNight ? "#0a0604" : "#2a1810";
-  const blossom = isNight
-    ? fade
-      ? "#3a1f30"
-      : "#5b2c4a"
-    : fade
-      ? "#e89cb8"
-      : "#f5b4cc";
-  const blossomEdge = isNight ? "#0a0506" : "#7a2e4a";
+  // Saturated, fully opaque palette — earlier versions used a faded
+  // ghost variant that read as translucent. We want these blossoms
+  // to look painted into the background, so the colors are crisp.
+  const blossom = isNight ? "#7a3a5a" : "#f293b4";
+  const blossomEdge = isNight ? "#1a0a10" : "#8a2e4a";
   return (
     <g transform={`translate(${x} ${y}) scale(${scale})`}>
       {/* Trunk + main fork — single tapered path so the silhouette
@@ -365,8 +376,8 @@ function BlossomCluster({
           r={b.sr * r}
           fill={color}
           stroke={edge}
-          strokeWidth={1}
-          strokeOpacity={0.35}
+          strokeWidth={1.2}
+          strokeOpacity={0.7}
         />
       ))}
     </g>
