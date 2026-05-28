@@ -218,6 +218,7 @@ export default function LobbyHost() {
           <GardenPicker
             isHost={false}
             compact={false}
+            decorative
             onPick={() => {
               /* TV is non-interactive — picking happens on the phone. */
             }}

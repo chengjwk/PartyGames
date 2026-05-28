@@ -26,6 +26,11 @@ interface GardenPickerProps {
   compact: boolean;
   // Tap handler — the game key matches `LobbyGame`.
   onPick: (game: LobbyGame) => void;
+  // Decorative-only mode: never dim the buttons even when not host.
+  // The TV passes this — it isn't supposed to be clickable, so the
+  // "disabled" 60% dim/saturate just makes the picker look washed
+  // out for no reason. Phone non-host keeps the dim as a UX cue.
+  decorative?: boolean;
 }
 
 // Per-game styling. Colors and stem heights are tuned for the
@@ -77,6 +82,7 @@ export default function GardenPicker({
   isHost,
   compact,
   onPick,
+  decorative = false,
 }: GardenPickerProps) {
   // Measure the wrapper to drive picker scale. Each flower
   // component sizes off its own `scale` prop; we pick scales that
@@ -227,6 +233,7 @@ export default function GardenPicker({
           : { left: "0%", bottom: "10%", align: "left-bottom" }}
         meta={META.math}
         isHost={isHost}
+        decorative={decorative}
         onPick={() => onPick("math")}
         flowerOffsetX={compact ? "-50%" : undefined}
         labelOffsetX={compact ? "-22%" : undefined}
@@ -241,6 +248,7 @@ export default function GardenPicker({
           : { left: "40%", bottom: "12%", align: "center-bottom" }}
         meta={META.word}
         isHost={isHost}
+        decorative={decorative}
         onPick={() => onPick("word")}
       >
         {renderSunflower(sunflowerScale)}
@@ -253,6 +261,7 @@ export default function GardenPicker({
           : { right: "2%", bottom: "8%", align: "right-bottom" }}
         meta={META.draw}
         isHost={isHost}
+        decorative={decorative}
         onPick={() => onPick("draw")}
       >
         {renderLotusPond(lotusScale)}
@@ -277,6 +286,7 @@ function PickerSlot({
   anchor,
   meta,
   isHost,
+  decorative,
   onPick,
   flowerOffsetX,
   labelOffsetX,
@@ -285,6 +295,9 @@ function PickerSlot({
   anchor: Anchor;
   meta: { label: string; tagline: string };
   isHost: boolean;
+  // Decorative-only — skip the "disabled" dim/saturate styling.
+  // See GardenPickerProps.decorative for the rationale.
+  decorative?: boolean;
   onPick: () => void;
   // Optional horizontal shift applied to the flower SVG only. The
   // label stays anchored to the slot's original position so it
@@ -327,8 +340,12 @@ function PickerSlot({
           flexDirection: "column",
           alignItems: "center",
           cursor: isHost ? "pointer" : "default",
-          opacity: isHost ? 1 : 0.6,
-          filter: isHost ? undefined : "saturate(0.6)",
+          // Dim + desaturate only when NOT host AND NOT decorative.
+          // TV (decorative) stays full color; phone non-host still
+          // sees the dim as a "you can't pick" UX cue.
+          opacity: isHost || decorative ? 1 : 0.6,
+          filter:
+            isHost || decorative ? undefined : "saturate(0.6)",
           transition: "opacity 0.2s",
         }}
       >
