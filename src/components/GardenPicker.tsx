@@ -110,12 +110,13 @@ export default function GardenPicker({
   }, []);
 
   // Heights for the wrapper. Phone uses a fixed-ish tall layout
-  // (room for the cherry tree's clipped canopy). TV caps at ~40%
-  // of viewport so the rest of the page (QR / room code / player
-  // list) plus the picker all fit without scrolling.
+  // (room for the cherry tree's clipped canopy). TV scales to ~34%
+  // of viewport — no upper cap, so on tall monitors we use the
+  // full painterly scale, while on short screens the picker
+  // shrinks so the lotus pond (anchored bottom:8%) never clips.
   const wrapperHeight = compact
     ? Math.min(560, Math.max(420, width * 1.4))
-    : Math.min(440, Math.max(280, Math.floor(viewportH * 0.4)));
+    : Math.max(220, Math.floor(viewportH * 0.34));
 
   // Linear scale derived from container width. Tuned so the
   // sunflower head fits between the cherry tree and pond on a

@@ -102,48 +102,68 @@ export default function LobbyHost() {
           flexDirection: "column",
         }}
       >
+        {/* Top row: QR + room code in a compact left column, title +
+            players list filling the rest on the right. Previous
+            layout used a 1fr/1fr grid that gave the QR half the
+            screen and pushed the players list off the bottom. */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            display: "flex",
+            flexDirection: "row",
             gap: 32,
-            alignItems: "center",
+            alignItems: "flex-start",
           }}
         >
-          <section style={{ textAlign: "center" }}>
-            <h1 style={{ fontSize: 56, margin: 0 }}>Party Games</h1>
-            <p style={{ color: "var(--muted)", marginTop: 4 }}>Scan to join</p>
+          <section
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 8,
+              flexShrink: 0,
+            }}
+          >
             <div
               style={{
                 background: "white",
-                padding: 16,
-                borderRadius: 12,
+                padding: 10,
+                borderRadius: 10,
                 display: "inline-block",
-                marginTop: 16,
               }}
             >
-              <QRCodeSVG value={playUrl} size={256} />
+              <QRCodeSVG value={playUrl} size={180} />
             </div>
-            <div style={{ fontSize: 96, fontWeight: 800, letterSpacing: 12, marginTop: 16 }}>
+            <div style={{ fontSize: 52, fontWeight: 800, letterSpacing: 8, lineHeight: 1 }}>
               {roomCode}
             </div>
-            <div style={{ fontFamily: "monospace", color: "var(--muted)" }}>{playUrl}</div>
+            <div style={{ fontFamily: "monospace", color: "var(--muted)", fontSize: 12 }}>
+              {playUrl}
+            </div>
           </section>
 
-          <section>
-            <h2 style={{ fontSize: 32, marginTop: 0 }}>
-              Players <span style={{ color: "var(--muted)" }}>({state?.players.length ?? 0})</span>
+          <section style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: 56, margin: 0 }}>Party Games</h1>
+            <p style={{ color: "var(--muted)", margin: "4px 0 16px" }}>
+              Scan to join
+            </p>
+            <h2 style={{ fontSize: 28, margin: "0 0 8px" }}>
+              Players{" "}
+              <span style={{ color: "var(--muted)" }}>
+                ({state?.players.length ?? 0})
+              </span>
             </h2>
             {(!state || state.players.length === 0) && (
-              <p style={{ color: "var(--muted)" }}>Waiting for players to join…</p>
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                Waiting for players to join…
+              </p>
             )}
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
               {state?.players.map((p) => (
                 <li
                   key={p.id}
                   style={{
-                    fontSize: 22,
-                    padding: "10px 14px",
+                    fontSize: 20,
+                    padding: "8px 12px",
                     background: "var(--bg-elev)",
                     borderRadius: 8,
                     display: "flex",
@@ -152,7 +172,7 @@ export default function LobbyHost() {
                     opacity: p.connected ? 1 : 0.4,
                   }}
                 >
-                  <Avatar id={p.avatar} size={64} />
+                  <Avatar id={p.avatar} size={48} />
                   <span style={{ flex: 1 }}>
                     {p.name}
                     {state.hostPlayerId === p.id && (
