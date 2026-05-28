@@ -258,8 +258,8 @@ function BlossomFlower({
             r={r * 0.55}
             fill={fill}
             stroke={edge}
-            strokeWidth={1.1}
-            strokeOpacity={0.5}
+            strokeWidth={1.3}
+            strokeOpacity={0.8}
           />
         );
       })}

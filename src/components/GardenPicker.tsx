@@ -53,8 +53,11 @@ const META: Record<
     label: "MathHive",
     tagline: "Solve the number",
     emoji: "🧮",
-    petalColor: "#f7a8c4",
-    petalEdge: "#7a2e4a",
+    // Cherry-blossom pink — punched up from the earlier pastel
+    // (#f7a8c4) which read as washed-out gray against the bright
+    // green hills. Edge darkened to give each petal silhouette.
+    petalColor: "#e8689e",
+    petalEdge: "#5a1f3c",
     swayKeyframes: "lily-sway-b",
   },
   draw: {
