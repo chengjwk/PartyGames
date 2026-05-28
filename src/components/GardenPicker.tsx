@@ -90,19 +90,44 @@ export default function GardenPicker({
     return () => ro.disconnect();
   }, []);
 
-  // Linear scale derived from container width. Tuned so the
-  // sunflower head fits between the cherry tree and pond on a
-  // 360px phone.
-  const baseUnit = compact ? width / 360 : width / 1100;
-  const sunflowerScale = compact ? baseUnit * 0.95 : baseUnit * 1.2;
-  const cherryScale = compact ? baseUnit * 0.9 : baseUnit * 1.4;
-  const lotusScale = compact ? baseUnit * 0.85 : baseUnit * 1.1;
+  // Track viewport height — TV layout needs to cap the picker
+  // height so the lotus pond (anchored bottom:8%) doesn't fall
+  // below the fold on shorter screens.
+  const [viewportH, setViewportH] = useState(() =>
+    typeof window === "undefined" ? 800 : window.innerHeight,
+  );
+  useEffect(() => {
+    const onResize = () => setViewportH(window.innerHeight);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  }, []);
 
-  // Heights for the wrapper. Phone uses a fixed-ish tall layout;
-  // TV gives the scene more room horizontally.
+  // Heights for the wrapper. Phone uses a fixed-ish tall layout
+  // (room for the cherry tree's clipped canopy). TV caps at ~40%
+  // of viewport so the rest of the page (QR / room code / player
+  // list) plus the picker all fit without scrolling.
   const wrapperHeight = compact
     ? Math.min(560, Math.max(420, width * 1.4))
-    : Math.min(560, Math.max(380, width * 0.42));
+    : Math.min(440, Math.max(280, Math.floor(viewportH * 0.4)));
+
+  // Linear scale derived from container width. Tuned so the
+  // sunflower head fits between the cherry tree and pond on a
+  // 360px phone. On TV we also bound scale by wrapper height so
+  // the cherry tree doesn't shoot past the top of a shorter wrapper.
+  const baseUnit = compact ? width / 360 : width / 1100;
+  // Reference design: when wrapperHeight=440 (the TV max), scales
+  // match the previous numbers. Below that, scale down proportionally.
+  const heightFactor = compact ? 1 : Math.min(1, wrapperHeight / 440);
+  const sunflowerScale =
+    (compact ? baseUnit * 0.95 : baseUnit * 1.1) * heightFactor;
+  const cherryScale =
+    (compact ? baseUnit * 0.9 : baseUnit * 1.25) * heightFactor;
+  const lotusScale =
+    (compact ? baseUnit * 0.85 : baseUnit * 1.0) * heightFactor;
 
   // Center content (emoji) per game — same factory across all
   // three so we don't recreate per render.

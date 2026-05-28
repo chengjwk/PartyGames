@@ -61,12 +61,13 @@ export default function SunflowerPainterly({
       }}
     >
       <defs>
-        {/* Petal gradient — strongest at the inner (disc) end of each
-            petal, fading toward the tip. */}
+        {/* Petal gradient — fully opaque so the petals don't go
+            see-through against the BG hills/sky. Same fix applied
+            across the painterly trio. */}
         <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor={petalColor} stopOpacity="1" />
-          <stop offset="60%" stopColor={petalColor} stopOpacity="0.92" />
-          <stop offset="100%" stopColor={petalColor} stopOpacity="0.65" />
+          <stop offset="60%" stopColor={petalColor} stopOpacity="1" />
+          <stop offset="100%" stopColor={petalColor} stopOpacity="1" />
         </linearGradient>
         <linearGradient id={leafGradId} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#3d6f33" />

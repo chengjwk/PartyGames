@@ -64,10 +64,13 @@ export default function LotusPondPainterly({
       }}
     >
       <defs>
+        {/* Fully opaque — same fix as CherryTreePainterly. Letting
+            edges fade to 0.62 made the lotus petals look like
+            see-through cellophane on top of the BG. */}
         <radialGradient id={gradId} cx="50%" cy="50%" r="60%">
           <stop offset="0%" stopColor={petalColor} stopOpacity="1" />
-          <stop offset="55%" stopColor={petalColor} stopOpacity="0.92" />
-          <stop offset="100%" stopColor={petalColor} stopOpacity="0.62" />
+          <stop offset="55%" stopColor={petalColor} stopOpacity="1" />
+          <stop offset="100%" stopColor={petalColor} stopOpacity="1" />
         </radialGradient>
       </defs>
 

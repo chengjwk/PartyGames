@@ -97,10 +97,14 @@ export default function CherryTreePainterly({
       }}
     >
       <defs>
+        {/* Fully opaque across the gradient — earlier versions faded
+            the edges to 0.6 opacity for a painterly feel, but that
+            let the BG (sky / hills) bleed through and the pink
+            blossoms ended up reading as muddy gray on the lobby. */}
         <radialGradient id={blossomGradId} cx="50%" cy="50%" r="60%">
           <stop offset="0%" stopColor={petalColor} stopOpacity="1" />
-          <stop offset="55%" stopColor={petalColor} stopOpacity="0.92" />
-          <stop offset="100%" stopColor={petalColor} stopOpacity="0.6" />
+          <stop offset="55%" stopColor={petalColor} stopOpacity="1" />
+          <stop offset="100%" stopColor={petalColor} stopOpacity="1" />
         </radialGradient>
       </defs>
 
