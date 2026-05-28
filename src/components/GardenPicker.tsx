@@ -254,11 +254,15 @@ export default function GardenPicker({
         {renderSunflower(sunflowerScale)}
       </PickerSlot>
 
-      {/* Lotus pond — bottom strip, spans the width. */}
+      {/* Lotus pond — bottom strip, spans the width. TV anchor
+          shifted from right:2%/bottom:8% to right:14%/bottom:3% so
+          the pond no longer overlaps with the BG flower row on the
+          right edge (which was making the flower look like it was
+          floating behind the pond water). */}
       <PickerSlot
         anchor={compact
           ? { left: "50%", bottom: "0%", align: "center-bottom" }
-          : { right: "2%", bottom: "8%", align: "right-bottom" }}
+          : { right: "14%", bottom: "3%", align: "right-bottom" }}
         meta={META.draw}
         isHost={isHost}
         decorative={decorative}
@@ -385,13 +389,22 @@ function PickerSlot({
             alignItems: "center",
           }}
         >
+          {/* Dual text-shadow gives a readable label in BOTH themes:
+              - Light mode: dark text on bright green grass — the
+                white halo (0 0 6px rgba(255,255,255,0.85)) gives a
+                glow around each glyph so the letterforms separate
+                from the BG.
+              - Dark mode: light text on dark green — the white
+                halo is invisible against the light fill, but the
+                dark drop shadow still adds depth. */}
           <div
             style={{
               fontSize: 16,
               fontWeight: 700,
               color: "var(--fg)",
               marginTop: 4,
-              textShadow: "0 1px 2px rgba(0,0,0,0.35)",
+              textShadow:
+                "0 0 6px rgba(255,255,255,0.85), 0 0 6px rgba(255,255,255,0.85), 0 1px 2px rgba(0,0,0,0.5)",
             }}
           >
             {meta.label}
@@ -404,7 +417,8 @@ function PickerSlot({
               padding: "0 6px",
               lineHeight: 1.3,
               maxWidth: 140,
-              textShadow: "0 1px 2px rgba(0,0,0,0.35)",
+              textShadow:
+                "0 0 5px rgba(255,255,255,0.85), 0 0 5px rgba(255,255,255,0.85), 0 1px 2px rgba(0,0,0,0.5)",
             }}
           >
             {meta.tagline}
