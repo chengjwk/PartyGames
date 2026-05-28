@@ -205,7 +205,12 @@ export default function GardenPicker({
         marginRight: compact ? -20 : "auto",
         height: wrapperHeight,
         maxWidth: compact ? undefined : 1200,
-        overflow: "hidden",
+        // Compact (phone) keeps overflow:hidden so the cherry-tree
+        // canopy that's intentionally pushed off the left screen
+        // edge stays clipped. TV lets the tree extend up into the
+        // open sky above the wrapper rather than truncating the
+        // canopy + labels.
+        overflow: compact ? "hidden" : "visible",
       }}
     >
       {/* Cherry blossom tree.

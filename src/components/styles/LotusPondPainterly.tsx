@@ -167,12 +167,15 @@ export default function LotusPondPainterly({
                 strokeOpacity={0.55}
                 strokeLinejoin="round"
               />
+              {/* Soft highlight — cut from 0.32 to 0.12 white so the
+                  lotus's reddish-purple stays saturated rather than
+                  washing toward pink. */}
               <ellipse
                 cx={len * 0.62}
                 cy={-wid * 0.14}
                 rx={len * 0.15}
                 ry={wid * 0.18}
-                fill="rgba(255,255,255,0.32)"
+                fill="rgba(255,255,255,0.12)"
               />
             </g>
           );

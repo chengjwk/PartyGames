@@ -207,9 +207,14 @@ export default function LobbyHost() {
             textAlign: "center",
           }}
         >
-          <p style={{ color: "var(--fg)", margin: "0 0 12px", fontSize: 24, fontWeight: 600 }}>
-            {hostName ? `${hostName} is picking a game…` : "Waiting for first player to join."}
-          </p>
+          {/* "Waiting for first player to join" was redundant with
+              the empty-state line in the players list. Only show
+              the bottom paragraph when a host is actively picking. */}
+          {hostName && (
+            <p style={{ color: "var(--fg)", margin: "0 0 12px", fontSize: 24, fontWeight: 600 }}>
+              {hostName} is picking a game…
+            </p>
+          )}
           <GardenPicker
             isHost={false}
             compact={false}

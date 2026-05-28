@@ -111,13 +111,15 @@ export default function SunflowerPainterly({
                 strokeWidth={STROKE}
                 strokeOpacity={0.55}
               />
-              {/* Soft inner highlight — a sliver near the disc end */}
+              {/* Soft inner highlight — a sliver near the disc end.
+                  Was 0.32 white which washed the gold into pale
+                  yellow; cut to 0.12 so the sunflower stays gold. */}
               <ellipse
                 cx={CENTER_R + PETAL_LEN * 0.22}
                 cy={-PETAL_W * 0.12}
                 rx={PETAL_LEN * 0.16}
                 ry={PETAL_W * 0.18}
-                fill="rgba(255,255,255,0.32)"
+                fill="rgba(255,255,255,0.12)"
               />
             </g>
           );
