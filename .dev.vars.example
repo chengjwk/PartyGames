@@ -1,0 +1,5 @@
+# Copy to .dev.vars (gitignored) for local `wrangler pages dev`.
+# Pick any short shared password + any long random secret. The
+# Cloudflare Pages dashboard holds the real production values.
+SITE_PASSWORD=changeme
+SITE_SECRET=replace-with-32-plus-random-bytes

@@ -175,6 +175,24 @@ export default function GardenBackground() {
           fill={isNight ? "#030a05" : "#214f1c"}
         />
 
+        {/* Bushes scattered between the foreground flowers — give the
+            scene more layered greenery than a flat lawn. */}
+        {BUSHES.map((b, i) => (
+          <Bush key={i} x={b.x} y={b.y} scale={b.scale} isNight={isNight} />
+        ))}
+
+        {/* Cherry blossom tree — silhouette in the mid-far ground on
+            the left so it doesn't crowd the foreground flowers. */}
+        <CherryTree x={170} y={830} scale={1.1} isNight={isNight} />
+        {/* Smaller, paler cherry tree further back on the right for
+            atmospheric depth. */}
+        <CherryTree x={1320} y={770} scale={0.7} isNight={isNight} fade />
+
+        {/* Pond on the right with a duck floating by. The pond sits
+            between the front grass and the foreground flowers. */}
+        <Pond cx={1180} cy={940} rx={210} ry={36} isNight={isNight} />
+        <Duck baseX={1100} baseY={928} isNight={isNight} />
+
         {/* Grass blades silhouetted */}
         {GRASS_BLADES.map((g, i) => (
           <path
@@ -191,6 +209,325 @@ export default function GardenBackground() {
         ))}
       </svg>
     </div>
+  );
+}
+
+// Lightly scattered bushes — small ellipse clusters with a darker
+// outline rim. Three-circle cluster reads as a single bush from
+// distance.
+const BUSHES: Array<{ x: number; y: number; scale: number }> = [
+  { x: 540, y: 935, scale: 1.0 },
+  { x: 880, y: 928, scale: 0.7 },
+  { x: 1500, y: 930, scale: 0.85 },
+  { x: 60, y: 935, scale: 0.9 },
+];
+
+function Bush({
+  x,
+  y,
+  scale,
+  isNight,
+}: {
+  x: number;
+  y: number;
+  scale: number;
+  isNight: boolean;
+}) {
+  const body = isNight ? "#0e2218" : "#2f6a2c";
+  const hi = isNight ? "#13301f" : "#3f8a3a";
+  return (
+    <g transform={`translate(${x} ${y}) scale(${scale})`}>
+      <ellipse cx={-22} cy={0} rx={26} ry={16} fill={body} />
+      <ellipse cx={20} cy={2} rx={28} ry={18} fill={body} />
+      <ellipse cx={0} cy={-10} rx={32} ry={20} fill={body} />
+      {/* Top highlight to suggest sun-side lighting. */}
+      <ellipse
+        cx={-4}
+        cy={-15}
+        rx={14}
+        ry={6}
+        fill={hi}
+        opacity={isNight ? 0.55 : 0.8}
+      />
+    </g>
+  );
+}
+
+// Cherry blossom tree — chunky brown S-curved trunk, two main forks,
+// and a few pink blossom clusters. Aimed for "reads as a tree at a
+// glance" rather than botanical accuracy; matches the painterly
+// CherryTreePainterly used in the picker without sharing code (this
+// one renders smaller + slightly stylized for the BG).
+function CherryTree({
+  x,
+  y,
+  scale,
+  isNight,
+  fade,
+}: {
+  x: number;
+  y: number;
+  scale: number;
+  isNight: boolean;
+  // Mid-distance tree gets a slight desaturation so the foreground
+  // tree pops.
+  fade?: boolean;
+}) {
+  const trunk = isNight ? "#1a1108" : "#5a3a1f";
+  const trunkEdge = isNight ? "#0a0604" : "#2a1810";
+  const blossom = isNight
+    ? fade
+      ? "#3a1f30"
+      : "#5b2c4a"
+    : fade
+      ? "#e89cb8"
+      : "#f5b4cc";
+  const blossomEdge = isNight ? "#0a0506" : "#7a2e4a";
+  return (
+    <g transform={`translate(${x} ${y}) scale(${scale})`}>
+      {/* Trunk + main fork — single tapered path so the silhouette
+          reads cleanly. Coordinates origin at the base, growing up. */}
+      <path
+        d="
+          M -8 0
+          C -12 -40, -6 -80, -14 -130
+          C -18 -160, -8 -180, -2 -190
+          L 2 -190
+          C 8 -180, 18 -160, 14 -130
+          C 6 -80, 12 -40, 8 0
+          Z
+        "
+        fill={trunk}
+        stroke={trunkEdge}
+        strokeWidth={1.5}
+      />
+      {/* Side branches reaching up into the canopy. */}
+      <path
+        d="M 0 -150 C -25 -170, -55 -185, -75 -210"
+        stroke={trunk}
+        strokeWidth={6}
+        fill="none"
+        strokeLinecap="round"
+      />
+      <path
+        d="M 0 -140 C 25 -160, 55 -180, 80 -200"
+        stroke={trunk}
+        strokeWidth={6}
+        fill="none"
+        strokeLinecap="round"
+      />
+      <path
+        d="M 0 -180 C 5 -200, 0 -225, -10 -240"
+        stroke={trunk}
+        strokeWidth={5}
+        fill="none"
+        strokeLinecap="round"
+      />
+      {/* Blossom clusters — clusters of overlapping circles read as
+          fluffy cherry blossom canopy from distance. */}
+      <BlossomCluster cx={-80} cy={-215} r={42} color={blossom} edge={blossomEdge} />
+      <BlossomCluster cx={-30} cy={-230} r={48} color={blossom} edge={blossomEdge} />
+      <BlossomCluster cx={20} cy={-235} r={50} color={blossom} edge={blossomEdge} />
+      <BlossomCluster cx={75} cy={-215} r={44} color={blossom} edge={blossomEdge} />
+      <BlossomCluster cx={-12} cy={-260} r={36} color={blossom} edge={blossomEdge} />
+    </g>
+  );
+}
+
+function BlossomCluster({
+  cx,
+  cy,
+  r,
+  color,
+  edge,
+}: {
+  cx: number;
+  cy: number;
+  r: number;
+  color: string;
+  edge: string;
+}) {
+  const blobs: Array<{ dx: number; dy: number; sr: number }> = [
+    { dx: 0, dy: 0, sr: 0.55 },
+    { dx: 0.4, dy: -0.2, sr: 0.45 },
+    { dx: -0.4, dy: -0.15, sr: 0.45 },
+    { dx: 0.25, dy: 0.35, sr: 0.4 },
+    { dx: -0.3, dy: 0.3, sr: 0.42 },
+    { dx: 0.1, dy: -0.45, sr: 0.4 },
+  ];
+  return (
+    <g transform={`translate(${cx} ${cy})`}>
+      {blobs.map((b, i) => (
+        <circle
+          key={i}
+          cx={b.dx * r}
+          cy={b.dy * r}
+          r={b.sr * r}
+          fill={color}
+          stroke={edge}
+          strokeWidth={1}
+          strokeOpacity={0.35}
+        />
+      ))}
+    </g>
+  );
+}
+
+// Pond — flattened ellipse with horizontal sheen ripples and a few
+// lily pads. Sits flush with the front grass line; the front grass
+// blades visually overlap it at the edges for a more integrated look.
+function Pond({
+  cx,
+  cy,
+  rx,
+  ry,
+  isNight,
+}: {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  isNight: boolean;
+}) {
+  const water = isNight ? "#0a1830" : "#3c7fb0";
+  const waterEdge = isNight ? "#020812" : "#1d5a86";
+  const sheen = isNight ? "#1a2f55" : "#9bd4ee";
+  const padBody = isNight ? "#0d1a10" : "#2f6a2c";
+  const padHi = isNight ? "#15281a" : "#4a8a3a";
+  return (
+    <g>
+      <ellipse
+        cx={cx}
+        cy={cy}
+        rx={rx}
+        ry={ry}
+        fill={water}
+        stroke={waterEdge}
+        strokeWidth={1.5}
+      />
+      {/* A pair of horizontal sheen ripples to read as still water. */}
+      <ellipse
+        cx={cx - 30}
+        cy={cy - 6}
+        rx={rx * 0.55}
+        ry={1.6}
+        fill={sheen}
+        opacity={0.55}
+      />
+      <ellipse
+        cx={cx + 50}
+        cy={cy + 4}
+        rx={rx * 0.35}
+        ry={1.4}
+        fill={sheen}
+        opacity={0.45}
+      />
+      {/* Two lily pads — small dark green ellipses with a notch. */}
+      <LilyPad x={cx - 130} y={cy + 6} scale={1} body={padBody} hi={padHi} />
+      <LilyPad x={cx + 120} y={cy - 4} scale={0.85} body={padBody} hi={padHi} />
+    </g>
+  );
+}
+
+function LilyPad({
+  x,
+  y,
+  scale,
+  body,
+  hi,
+}: {
+  x: number;
+  y: number;
+  scale: number;
+  body: string;
+  hi: string;
+}) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${scale})`}>
+      <ellipse cx={0} cy={0} rx={22} ry={8} fill={body} />
+      <path
+        d="M 0 0 L 10 -3 L 10 3 Z"
+        fill="#000"
+        opacity={0.35}
+      />
+      <ellipse cx={-4} cy={-2} rx={10} ry={2.5} fill={hi} opacity={0.7} />
+    </g>
+  );
+}
+
+// Duck — small SVG that drifts horizontally across the pond and
+// bobs gently. Pure CSS animation; no rAF. We position absolutely
+// over the pond's coordinate space using SVG transforms + keyframes.
+function Duck({
+  baseX,
+  baseY,
+  isNight,
+}: {
+  baseX: number;
+  baseY: number;
+  isNight: boolean;
+}) {
+  // Dimmer night palette so the duck doesn't glow against dark water.
+  const body = isNight ? "#3a3528" : "#ffffff";
+  const wing = isNight ? "#2a2620" : "#e9e3d0";
+  const beak = isNight ? "#7a5a14" : "#f5a623";
+  const eye = isNight ? "#080808" : "#1a1a1f";
+  return (
+    <g>
+      <style>{`
+        @keyframes gb-duck-drift {
+          0%   { transform: translate(0, 0); }
+          50%  { transform: translate(170px, 0); }
+          100% { transform: translate(0, 0); }
+        }
+        @keyframes gb-duck-bob {
+          0%, 100% { transform: translateY(0); }
+          50%      { transform: translateY(-2px); }
+        }
+      `}</style>
+      <g
+        transform={`translate(${baseX} ${baseY})`}
+        style={{
+          animation: "gb-duck-drift 18s ease-in-out infinite",
+          transformBox: "fill-box",
+        }}
+      >
+        <g
+          style={{
+            animation: "gb-duck-bob 2.4s ease-in-out infinite",
+            transformBox: "fill-box",
+          }}
+        >
+          {/* Body */}
+          <ellipse cx={0} cy={0} rx={22} ry={10} fill={body} stroke={eye} strokeWidth={1} />
+          {/* Tail tip */}
+          <path
+            d="M -22 -2 L -32 -8 L -22 2 Z"
+            fill={body}
+            stroke={eye}
+            strokeWidth={1}
+          />
+          {/* Wing detail */}
+          <ellipse cx={-4} cy={-2} rx={12} ry={5} fill={wing} />
+          {/* Neck + head */}
+          <path
+            d="M 16 -2 Q 22 -16 26 -16 Q 32 -16 32 -10 Q 32 -3 26 -2 Z"
+            fill={body}
+            stroke={eye}
+            strokeWidth={1}
+          />
+          {/* Beak */}
+          <path
+            d="M 30 -10 L 38 -8 L 30 -6 Z"
+            fill={beak}
+            stroke={eye}
+            strokeWidth={0.6}
+          />
+          {/* Eye */}
+          <circle cx={27} cy={-12} r={1.3} fill={eye} />
+        </g>
+      </g>
+    </g>
   );
 }
 

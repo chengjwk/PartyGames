@@ -71,6 +71,29 @@ Vite picks this up automatically; you can then run `npm run deploy:web` without 
 
 ---
 
+## Password gate
+
+The site is gated by a shared password served by a Cloudflare Pages
+Function (`functions/_middleware.ts`). Two env vars need to be set on
+the Pages project **before** the next deploy or the site will return
+503:
+
+| Var | What it is | Example |
+|---|---|---|
+| `SITE_PASSWORD` | Shared password users type in | `petals` |
+| `SITE_SECRET`   | Random string used to HMAC-sign the auth cookie | `openssl rand -hex 32` |
+
+**Cloudflare dashboard route**
+Pages project → Settings → **Environment variables** → add both for
+*Production* (and *Preview* if you preview-deploy).
+
+**Local dev**
+Copy `.dev.vars.example` → `.dev.vars` (gitignored). `wrangler pages dev`
+picks it up. Rotate `SITE_SECRET` to log everyone out (their cookie
+fails HMAC verification on the next request).
+
+---
+
 ## Auto-deploy on git push (optional)
 
 If you'd rather have GitHub auto-deploy:
