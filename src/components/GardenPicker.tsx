@@ -389,22 +389,17 @@ function PickerSlot({
             alignItems: "center",
           }}
         >
-          {/* Dual text-shadow gives a readable label in BOTH themes:
-              - Light mode: dark text on bright green grass — the
-                white halo (0 0 6px rgba(255,255,255,0.85)) gives a
-                glow around each glyph so the letterforms separate
-                from the BG.
-              - Dark mode: light text on dark green — the white
-                halo is invisible against the light fill, but the
-                dark drop shadow still adds depth. */}
+          {/* textShadow driven by --label-halo (see index.css):
+              white halo in light mode for readability against the
+              bright green grass; just a dark drop in dark mode so
+              the already-light text doesn't get an aggressive glow. */}
           <div
             style={{
               fontSize: 16,
               fontWeight: 700,
               color: "var(--fg)",
               marginTop: 4,
-              textShadow:
-                "0 0 6px rgba(255,255,255,0.85), 0 0 6px rgba(255,255,255,0.85), 0 1px 2px rgba(0,0,0,0.5)",
+              textShadow: "var(--label-halo)",
             }}
           >
             {meta.label}
@@ -417,8 +412,7 @@ function PickerSlot({
               padding: "0 6px",
               lineHeight: 1.3,
               maxWidth: 140,
-              textShadow:
-                "0 0 5px rgba(255,255,255,0.85), 0 0 5px rgba(255,255,255,0.85), 0 1px 2px rgba(0,0,0,0.5)",
+              textShadow: "var(--label-halo)",
             }}
           >
             {meta.tagline}
