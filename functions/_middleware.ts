@@ -1,10 +1,22 @@
-// Sitewide password gate. Runs before every request — static asset
-// or function — and either passes the request through (cookie is
-// valid) or serves the login page directly. The /login and
-// /api/login routes are exempt so the login flow itself isn't gated.
+// Password gate, scoped to the HOST flow. The phone player flow
+// (/play/*, which is what the QR code points at) walks through
+// unguarded so guests don't need to know the password to scan + play.
+// The SPA's static bundle is also public — without it the player
+// phone couldn't actually load the page after scanning.
+//
+// Gated paths: /, /host/*, /flower-styles, /preview/*, /avatar-styles.html.
+// Public paths: /play/*, /assets/*, /login, /api/login, common static
+// file extensions (favicons, images, fonts).
 //
 // The shared password and signing secret come from Cloudflare Pages
 // environment variables (SITE_PASSWORD + SITE_SECRET). See DEPLOY.md.
+//
+// Caveat: once the SPA bundle is loaded (which the player path makes
+// public), client-side routing can in theory navigate to a host
+// route without going through the middleware. That's a deliberate
+// hack vs. a "casual barrier," which is all the password aims to
+// be — the secret never ships in the bundle, so source inspection
+// can't reveal it.
 
 import {
   COOKIE_NAME,
@@ -15,14 +27,29 @@ import {
   type PageEnv,
 } from "./_lib";
 
-const ALLOW_PATHS = new Set<string>(["/login", "/api/login"]);
+// Decide whether a path bypasses the password gate.
+function isPublicPath(pathname: string): boolean {
+  // Login flow.
+  if (pathname === "/login" || pathname === "/api/login") return true;
+  // Player flow — QR-scanned URLs. Matches /play and anything beneath.
+  if (pathname === "/play" || pathname.startsWith("/play/")) return true;
+  // Vite-built SPA bundle. The browser fetches these once the SPA
+  // entry HTML loads, so they have to be reachable on the player path.
+  if (pathname.startsWith("/assets/")) return true;
+  // Common static-asset extensions in public/ (favicons, images,
+  // fonts). Deliberately excludes .html so /index.html and other
+  // standalone HTML pages aren't trivially reachable without auth.
+  if (/\.(svg|png|ico|jpe?g|gif|webp|woff2?|css|js|map)$/i.test(pathname)) {
+    return true;
+  }
+  return false;
+}
 
 export const onRequest: PagesFunction<PageEnv> = async (ctx) => {
   const url = new URL(ctx.request.url);
 
-  // Always let the login endpoints through; otherwise the login
-  // page would itself redirect to the login page (loop).
-  if (ALLOW_PATHS.has(url.pathname)) {
+  // Public paths always pass — login endpoints, player paths, SPA assets.
+  if (isPublicPath(url.pathname)) {
     return ctx.next();
   }
 
@@ -45,9 +72,7 @@ export const onRequest: PagesFunction<PageEnv> = async (ctx) => {
 
   // Serve the login HTML directly (rather than 302-redirecting to
   // /login) so we don't bounce the user's browser for first-load
-  // navigations. The same login page works for asset requests too,
-  // which just means the inline JS bundle never loads when the user
-  // hasn't auth'd — fine, because there's no UI to drive without it.
+  // navigations.
   const next = sanitizeNext(url.pathname + url.search);
   return loginPage({ next, errored: false });
 };
