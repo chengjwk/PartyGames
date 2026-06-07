@@ -16,6 +16,14 @@ const LETTER_VALUES: Record<string, number> = {
 
 const PANGRAM_BONUS = 20;
 const FIRST_FINDER_BONUS = 3;
+// Each pangram beyond the first this round (per player) tacks on this much
+// on top of the base +20. So pangram #2, #3, #4… are all worth the same
+// extra — keeps a one-off lucky find from dominating the score, but still
+// rewards players who keep digging.
+const EXTRA_PANGRAM_BONUS = 30;
+// "Super pangram" = uses all 7 puzzle letters AND at least one bee letter.
+// Substantially rarer than a regular pangram, so the prize is bigger.
+const SUPER_PANGRAM_BONUS = 40;
 
 export type ValidationResult =
   | { ok: false; reason: SubmitReason }
@@ -70,24 +78,43 @@ export function validateWord(
 }
 
 // Base score = sum of Scrabble values for each letter.
-// + 20 for pangrams (uses all 7 puzzle letters)
+// + 20 for the first pangram of a round (per player)
+// + 30 for each pangram beyond the first (per player, per round)
+// + 40 if the pangram is a "super pangram" (uses all 7 + a bee letter)
 // + 3 for first finder of this word in this round
 // (Bonus-letter 2x and player handicap multipliers apply outside this fn.)
 export function scoreWord(opts: {
   word: string;
   isPangram: boolean;
   firstFinder: boolean;
+  // Number of pangrams this player has already found this round, BEFORE
+  // counting the current word. Used to compute the per-pangram ordinal and
+  // pick between the base and extra pangram bonuses.
+  priorPangramsThisRound?: number;
+  // True iff the current word is a pangram that also includes at least one
+  // bee letter (current or in grace). Server decides this; we just apply
+  // the bonus when set.
+  superPangram?: boolean;
 }): ScoredWord {
   let points = 0;
   for (const ch of opts.word) {
     points += LETTER_VALUES[ch] ?? 1;
   }
-  if (opts.isPangram) points += PANGRAM_BONUS;
+  let pangramOrdinal: number | undefined;
+  if (opts.isPangram) {
+    const prior = opts.priorPangramsThisRound ?? 0;
+    pangramOrdinal = prior + 1;
+    // 1st pangram → +20. 2nd+ → +20 + 30 = +50 each (cap-at-2nd intent).
+    points += prior === 0 ? PANGRAM_BONUS : PANGRAM_BONUS + EXTRA_PANGRAM_BONUS;
+    if (opts.superPangram) points += SUPER_PANGRAM_BONUS;
+  }
   if (opts.firstFinder) points += FIRST_FINDER_BONUS;
   return {
     word: opts.word,
     points,
     isPangram: opts.isPangram,
     firstFinder: opts.firstFinder,
+    superPangram: opts.superPangram || undefined,
+    pangramOrdinal,
   };
 }

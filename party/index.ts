@@ -19,7 +19,11 @@ import pangramDefs from "./data/pangram-defs.json";
 const COUNTDOWN_MS = 3000;
 const VOWELS_LOWER = new Set(["a", "e", "i", "o", "u"]);
 const PAUSE_GRACE_MS = 3000;
-const BEE_DEPARTED_GRACE_MS = 5000;
+// How long after a bee letter departs the server still accepts it. A
+// super-pangram is 8+ letters and easy to be mid-type when the bee leaves;
+// a tight grace kept rejecting otherwise-valid submits. 10s is enough that
+// "typing while the bee was on screen" almost always lands in-window.
+const BEE_DEPARTED_GRACE_MS = 10000;
 // Swarm-mode cadence — tuned for ~9 worker bees + 1 queen on a 90s round,
 // with 2-3 simultaneous bees on the board by the second half.
 const SWARM_FIRST_OFFSET_MS = 8_000;
@@ -748,6 +752,17 @@ export default class WordHiveServer implements Party.Server {
       this.config.mode === "swarm" && queen ? queen.letter : undefined;
     const result = validateWord(msg.word, this.puzzle, extraLetters, centerOverride);
     if (!result.ok) {
+      // Log enough state to diagnose "I had the bee letter typed, why was it
+      // rejected?" complaints from CF logs after-the-fact. The interesting
+      // signal is usually whether the bee letter was in extraLetters at the
+      // exact moment validateWord ran.
+      console.log(
+        `[submit reject] reason=${result.reason} word=${JSON.stringify(msg.word)} ` +
+          `puzzle=${this.puzzle.letters.join("")} center=${this.puzzle.center} ` +
+          `bees=${[...this.bees.map((b) => b.letter)].join(",") || "-"} ` +
+          `recent=${this.recentBees.map((r) => r.letter).join(",") || "-"} ` +
+          `extra=${[...extraLetters].join(",") || "-"}`,
+      );
       this.send(sender, {
         type: "submitResult",
         word: msg.word,
@@ -777,9 +792,19 @@ export default class WordHiveServer implements Party.Server {
     // In classic mode the static bonusLetter scores 2x. In swarm mode there's
     // no static bonus — bees carry multipliers instead.
     const usedBonus = !isSwarm && result.word.includes(this.puzzle.bonusLetter);
-    // The set of bee letters actually used in this word.
+    // The set of bee letters actually used in this word. Includes letters
+    // in grace from recently-departed bees so a super pangram typed during
+    // the grace window still counts as super.
     const beeLettersUsed = this.bees.filter((b) => result.word.includes(b.letter));
+    const beeOrGraceLetterUsed =
+      beeLettersUsed.length > 0 ||
+      this.recentBees.some((r) => result.word.includes(r.letter));
     const usedBee = beeLettersUsed.length > 0;
+    // Super pangram: pangram + word contains a bee letter (current or grace).
+    const isSuperPangram = result.isPangram && beeOrGraceLetterUsed;
+    // How many pangrams this player has already found this round, BEFORE this
+    // word. Drives the +20-vs-+50 bonus split inside scoreWord.
+    const priorPangrams = found.filter((w) => w.isPangram).length;
     let m = 1;
     if (usedBonus) m *= 2;
     if (isSwarm && beeLettersUsed.length > 0) {
@@ -792,6 +817,8 @@ export default class WordHiveServer implements Party.Server {
       word: result.word,
       isPangram: result.isPangram,
       firstFinder: isFirstFinder,
+      priorPangramsThisRound: priorPangrams,
+      superPangram: isSuperPangram,
     });
     const scored: ScoredWord = {
       ...base,
@@ -829,6 +856,8 @@ export default class WordHiveServer implements Party.Server {
       points: scored.points,
       isPangram: scored.isPangram,
       firstFinder: scored.firstFinder,
+      superPangram: scored.superPangram,
+      pangramOrdinal: scored.pangramOrdinal,
     });
     this.sendPrivate(sender);
     if (this.config.easyMode) this.broadcastState();

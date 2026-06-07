@@ -676,7 +676,20 @@ function PlayerRound({
     if (lastSubmit.ok) {
       if (lastSubmit.isPangram) sounds.pangram();
       else sounds.good();
-      const tag = `+${lastSubmit.points}${lastSubmit.isPangram ? " PANGRAM" : ""}${lastSubmit.firstFinder ? " 1st!" : ""}`;
+      // Pangram label escalates: regular → "PANGRAM #2" for the 2nd+ in a
+      // round (signals the +30 bonus kicked in) → "SUPER PANGRAM!" when the
+      // word ALSO uses a bee letter (the +40 super bonus).
+      let pangramLabel = "";
+      if (lastSubmit.isPangram) {
+        if (lastSubmit.superPangram) {
+          pangramLabel = " SUPER PANGRAM!";
+        } else if ((lastSubmit.pangramOrdinal ?? 1) >= 2) {
+          pangramLabel = ` PANGRAM #${lastSubmit.pangramOrdinal}`;
+        } else {
+          pangramLabel = " PANGRAM";
+        }
+      }
+      const tag = `+${lastSubmit.points}${pangramLabel}${lastSubmit.firstFinder ? " 1st!" : ""}`;
       const id = ++popupIdRef.current;
       setPopups((prev) => [...prev, { id, text: tag, pangram: !!lastSubmit.isPangram }]);
       setTimeout(() => setPopups((prev) => prev.filter((p) => p.id !== id)), 1100);

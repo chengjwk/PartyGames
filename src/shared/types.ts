@@ -68,6 +68,12 @@ export interface ScoredWord {
   // Lets the UI add a star/sparkle on those word chips later.
   bonusLetter?: boolean;
   beeBonus?: boolean;
+  // True when this pangram uses all 7 puzzle letters AND at least one bee
+  // letter — a "super pangram" earning the extra bonus.
+  superPangram?: boolean;
+  // 1-based ordinal among this player's pangrams this round. The 1st pangram
+  // is worth the base +20; the 2nd, 3rd, … each tack on EXTRA_PANGRAM_BONUS.
+  pangramOrdinal?: number;
 }
 
 export interface PlayerRoundResult {
@@ -168,6 +174,10 @@ export type ServerMessage =
       points?: number;
       isPangram?: boolean;
       firstFinder?: boolean;
+      // Set when the player found a super pangram (all 7 + bee letter).
+      superPangram?: boolean;
+      // 1-based ordinal of pangram within this round for this player.
+      pangramOrdinal?: number;
     }
   | { type: "switchGames" }
   | { type: "error"; message: string };

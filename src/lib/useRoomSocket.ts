@@ -15,6 +15,11 @@ export interface SubmitFeedback {
   points?: number;
   isPangram?: boolean;
   firstFinder?: boolean;
+  // True when the pangram uses all 7 + a bee letter — UI shows a "SUPER!" tag.
+  superPangram?: boolean;
+  // 1-based ordinal of this player's pangrams in the current round. The 2nd+
+  // pangram earns the extra bonus, so we label it for the popup.
+  pangramOrdinal?: number;
   at: number;
 }
 
@@ -69,6 +74,8 @@ export function useRoomSocket(
             points: msg.points,
             isPangram: msg.isPangram,
             firstFinder: msg.firstFinder,
+            superPangram: msg.superPangram,
+            pangramOrdinal: msg.pangramOrdinal,
             at: Date.now(),
           });
           break;
