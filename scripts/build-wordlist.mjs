@@ -1,6 +1,10 @@
 // Downloads dwyl/english-words and produces:
-//   party/data/words.json    — all valid playable words (≥3 chars, ≤7 distinct letters, alphabetic only)
+//   party/data/words.json    — all valid playable words (≥3 chars, ≤8 distinct letters, alphabetic only)
 //   party/data/pangrams.json — 7-letter words with exactly 7 distinct letters (puzzle seeds)
+//
+// The 8-distinct cap is the ceiling because bee letters add a single extra
+// letter to the 7-letter puzzle, so a super pangram is at most 8 distinct
+// letters. Words above that could never be played, even with a bee.
 //
 // Run with: node scripts/build-wordlist.mjs
 
@@ -28,7 +32,9 @@ async function main() {
     if (w.length < 3) continue;
     if (!/^[a-z]+$/.test(w)) continue;
     const distinct = new Set(w).size;
-    if (distinct > 7) continue; // could never appear in any 7-letter puzzle
+    // 8 distinct = puzzle's 7 + one bee letter (a super pangram). Anything
+    // above 8 still can't be played: more distinct letters than the board.
+    if (distinct > 8) continue;
     words.add(w);
     if (w.length === 7 && distinct === 7) pangrams.push(w);
   }
