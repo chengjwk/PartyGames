@@ -6,6 +6,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import PartySocket from "partysocket";
 import { PARTY_HOST } from "../config";
 import { getClientId } from "../lib/clientId";
@@ -196,6 +197,7 @@ export default function LobbyPlay() {
       >
         <h1 style={{ margin: 0, color: "var(--accent)" }}>Party Games</h1>
         <p style={{ color: "var(--muted)", marginTop: 4 }}>Room {roomCode}</p>
+        {isHost && <InviteBlock roomCode={roomCode} />}
         <h2 style={{ fontSize: 22, marginBottom: 8 }}>
           Players <span style={{ color: "var(--muted)" }}>({state.players.length})</span>
         </h2>
@@ -288,7 +290,53 @@ export default function LobbyPlay() {
   );
 }
 
-// Game-picker flower — tappable button. Each game has its own species so
+// Lets the host hand the room to other phones when there's no TV showing a
+// QR code. Collapsed by default so it doesn't crowd the lobby.
+function InviteBlock({ roomCode }: { roomCode: string }) {
+  const [open, setOpen] = useState(false);
+  const playUrl = `${window.location.origin}/play/${roomCode}`;
+  return (
+    <section style={{ marginBottom: 12 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          background: "var(--bg-elev)",
+          color: "var(--fg)",
+          border: "1px solid var(--border)",
+          borderRadius: 8,
+          padding: "8px 12px",
+          fontSize: 14,
+        }}
+      >
+        {open ? "Hide invite" : "Invite players"}
+      </button>
+      {open && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: 12,
+            background: "var(--bg-elev)",
+            borderRadius: 12,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+          }}
+        >
+          <div style={{ background: "white", padding: 8, borderRadius: 8, lineHeight: 0 }}>
+            <QRCodeSVG value={playUrl} size={116} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: "var(--muted)" }}>Others scan this</div>
+            <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: 4 }}>{roomCode}</div>
+            <div style={{ fontFamily: "monospace", fontSize: 11, color: "var(--muted)", overflowWrap: "anywhere" }}>
+              {playUrl}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function NameEntry({
   roomCode,

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import GardenBackground from "../components/GardenBackground";
 import FullscreenButton from "../components/FullscreenButton";
@@ -15,7 +16,15 @@ function generateRoomCode(): string {
 
 export default function Home() {
   const nav = useNavigate();
-  const start = () => nav(`/host/${generateRoomCode()}`);
+  const [noTv, setNoTv] = useState(false);
+  // With a TV, this device is the shared display and joins no game. Without
+  // one, it goes down the player route instead — the first phone in becomes
+  // host, so it gets the game picker and the round controls while still
+  // playing along.
+  const start = () => {
+    const code = generateRoomCode();
+    nav(noTv ? `/play/${code}` : `/host/${code}`);
+  };
   return (
     <>
       <GardenBackground variant="lush" />
@@ -40,6 +49,26 @@ export default function Home() {
         >
           Host a new game
         </button>
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            marginTop: 20,
+            color: "var(--muted)",
+            fontSize: 16,
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={noTv}
+            onChange={(e) => setNoTv(e.target.checked)}
+            style={{ width: 20, height: 20 }}
+          />
+          No TV — play and host on this phone
+        </label>
       </main>
     </>
   );
