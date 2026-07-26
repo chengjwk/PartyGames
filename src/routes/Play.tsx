@@ -1191,7 +1191,7 @@ function reasonText(reason: string | undefined): string {
   }
 }
 
-// DiceIcon, PencilIcon, and EditProfile now live in
+// PencilIcon and EditProfile now live in
 // src/components/EditProfile.tsx so MathHive and Pollinart can
 // share the same modal. WordHive imports them at the top of this
 // file.

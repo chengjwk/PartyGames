@@ -4,7 +4,6 @@
 // full-length 24-character name on one line on a narrow phone.
 
 import Avatar from "./Avatar";
-import DiceIcon from "./DiceIcon";
 import { randomName } from "../lib/randomName";
 
 export default function NameField({
@@ -59,15 +58,16 @@ export default function NameField({
         style={{
           background: "transparent",
           border: "none",
-          color: "var(--muted)",
           padding: 6,
+          fontSize: 20,
+          lineHeight: 1,
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
         }}
       >
-        <DiceIcon />
+        🎲
       </button>
     </div>
   );
