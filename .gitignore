@@ -9,3 +9,6 @@ dist
 .vscode
 # TS incremental build cache — regenerated on every `tsc -b`.
 tsconfig.tsbuildinfo
+
+# Claude Code local machine settings (permissions cache).
+.claude/settings.local.json
