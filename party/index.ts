@@ -314,14 +314,44 @@ export default class WordHiveServer implements Party.Server {
     this.broadcastState();
   }
 
+  // Wipes every scrap of per-game state and cancels every pending timer.
+  // All three entry points into a fresh game funnel through this so they
+  // can't drift apart and leave something from the last game behind.
+  private clearGameState() {
+    if (this.roundTimer) {
+      clearTimeout(this.roundTimer);
+      this.roundTimer = null;
+    }
+    if (this.startTimer) {
+      clearTimeout(this.startTimer);
+      this.startTimer = null;
+    }
+    if (this.pauseGraceTimer) {
+      clearTimeout(this.pauseGraceTimer);
+      this.pauseGraceTimer = null;
+    }
+    this.clearBee();
+    this.currentRound = 0;
+    this.totalScores.clear();
+    this.puzzle = null;
+    this.foundByPlayer.clear();
+    this.firstFinder.clear();
+    this.roundSummary = null;
+    this.roundStartsAt = null;
+    this.roundEndsAt = null;
+    this.paused = false;
+    this.pauseRemainingMs = null;
+    this.pausedAt = null;
+    this.gameStats = { longest: null, highest: null };
+    this.lastPangramAt = null;
+    this.allWordsByPlayer.clear();
+  }
+
   private handleStartGame() {
     if (this.phase !== "LOBBY") return;
     if (this.players.size === 0) return;
-    this.totalScores.clear();
+    this.clearGameState();
     for (const cid of this.players.keys()) this.totalScores.set(cid, 0);
-    this.currentRound = 0;
-    this.gameStats = { longest: null, highest: null };
-    this.allWordsByPlayer.clear();
     this.beginCountdown();
   }
 
@@ -705,25 +735,8 @@ export default class WordHiveServer implements Party.Server {
 
   private handlePlayAgain() {
     if (this.phase !== "FINAL_RESULTS") return;
+    this.clearGameState();
     this.phase = "LOBBY";
-    this.currentRound = 0;
-    this.totalScores.clear();
-    this.puzzle = null;
-    this.foundByPlayer.clear();
-    this.firstFinder.clear();
-    this.roundSummary = null;
-    this.roundStartsAt = null;
-    this.roundEndsAt = null;
-    this.paused = false;
-    this.pauseRemainingMs = null;
-    this.pausedAt = null;
-    if (this.pauseGraceTimer) {
-      clearTimeout(this.pauseGraceTimer);
-      this.pauseGraceTimer = null;
-    }
-    this.clearBee();
-    this.gameStats = { longest: null, highest: null };
-    this.allWordsByPlayer.clear();
     this.broadcastState();
     this.broadcastAllPrivate();
   }
@@ -937,34 +950,8 @@ export default class WordHiveServer implements Party.Server {
   // (and avatars/names) but scores reset like a brand-new game.
   private handleResetGame() {
     if (this.phase === "LOBBY") return;
-    if (this.roundTimer) {
-      clearTimeout(this.roundTimer);
-      this.roundTimer = null;
-    }
-    if (this.startTimer) {
-      clearTimeout(this.startTimer);
-      this.startTimer = null;
-    }
-    if (this.pauseGraceTimer) {
-      clearTimeout(this.pauseGraceTimer);
-      this.pauseGraceTimer = null;
-    }
-    this.clearBee();
+    this.clearGameState();
     this.phase = "LOBBY";
-    this.currentRound = 0;
-    this.totalScores.clear();
-    this.puzzle = null;
-    this.foundByPlayer.clear();
-    this.firstFinder.clear();
-    this.roundSummary = null;
-    this.roundStartsAt = null;
-    this.roundEndsAt = null;
-    this.paused = false;
-    this.pauseRemainingMs = null;
-    this.pausedAt = null;
-    this.gameStats = { longest: null, highest: null };
-    this.lastPangramAt = null;
-    this.allWordsByPlayer.clear();
     this.broadcastState();
     this.broadcastAllPrivate();
   }

@@ -117,6 +117,9 @@ function useTickAudio(target: number | null | undefined) {
       if (ms <= 0) continue;
       timers.push(
         setTimeout(() => {
+          // Background tabs throttle timers, so a tick can fire well away from
+          // the second it was meant for. Re-check before making noise.
+          if (Math.abs(target - Date.now() - sec * 1000) > 500) return;
           if (sec === 1) sounds.tickFinal();
           else sounds.tick();
         }, ms),
