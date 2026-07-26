@@ -14,7 +14,8 @@ import FullscreenButton from "../components/FullscreenButton";
 import GameMenu from "../components/GameMenu";
 import Fireworks from "../components/Fireworks";
 import Avatar from "../components/Avatar";
-import EditProfile, { DiceIcon, PencilIcon } from "../components/EditProfile";
+import NameField from "../components/NameField";
+import EditProfile, { PencilIcon } from "../components/EditProfile";
 import type {
   Player,
   PrivatePlayerState,
@@ -224,45 +225,7 @@ function NameEntry({
       <p style={{ color: "var(--muted)", margin: 0 }}>
         Joining room <strong style={{ color: "var(--fg)" }}>{roomCode}</strong>
       </p>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: 12,
-          background: "var(--bg-elev)",
-          borderRadius: 12,
-        }}
-      >
-        <Avatar id={avatar} size={64} />
-        <input
-          type="text"
-          inputMode="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={24}
-          autoFocus
-          onKeyDown={(e) => e.key === "Enter" && onJoin()}
-          style={{ fontSize: 22, padding: 12, flex: 1, minWidth: 0 }}
-        />
-        <button
-          onClick={() => setName(randomName())}
-          aria-label="Random name"
-          title="New random name"
-          style={{
-            background: "var(--bg)",
-            color: "var(--fg)",
-            border: "1px solid var(--border)",
-            borderRadius: 8,
-            padding: "10px 12px",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <DiceIcon />
-        </button>
-      </div>
+      <NameField name={name} setName={setName} avatar={avatar} onSubmit={onJoin} />
       <div>
         <div style={{ color: "var(--muted)", fontSize: 14, marginBottom: 8 }}>Pick an avatar</div>
         <div

@@ -10,8 +10,8 @@
 
 import { useState } from "react";
 import { AVATARS } from "../lib/avatars";
-import { randomName } from "../lib/randomName";
 import Avatar from "./Avatar";
+import NameField from "./NameField";
 
 interface EditProfileProps {
   initialName: string;
@@ -64,44 +64,7 @@ export default function EditProfile({
         }}
       >
         <h2 style={{ margin: 0, fontSize: 20 }}>Edit profile</h2>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: 10,
-            background: "var(--bg-elev)",
-            borderRadius: 10,
-          }}
-        >
-          <Avatar id={avatar} size={56} />
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={24}
-            autoFocus
-            onKeyDown={(e) => e.key === "Enter" && save()}
-            style={{ fontSize: 20, padding: 10, flex: 1, minWidth: 0 }}
-          />
-          <button
-            onClick={() => setName(randomName())}
-            aria-label="Random name"
-            title="New random name"
-            style={{
-              background: "var(--bg)",
-              color: "var(--fg)",
-              border: "1px solid var(--border)",
-              borderRadius: 8,
-              padding: "8px 10px",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <DiceIcon />
-          </button>
-        </div>
+        <NameField name={name} setName={setName} avatar={avatar} onSubmit={save} />
         <div
           style={{
             display: "grid",
@@ -176,25 +139,6 @@ export function PencilIcon() {
         strokeWidth="2"
         strokeLinecap="round"
       />
-    </svg>
-  );
-}
-
-export function DiceIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect
-        x="3"
-        y="3"
-        width="18"
-        height="18"
-        rx="3"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <circle cx="8" cy="8" r="1.5" fill="currentColor" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-      <circle cx="16" cy="16" r="1.5" fill="currentColor" />
     </svg>
   );
 }
