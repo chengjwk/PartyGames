@@ -871,26 +871,32 @@ function FoundList({ found }: { found: ScoredWord[] }) {
       <div style={{ color: "var(--muted)", fontSize: 14, marginBottom: 6 }}>
         Found ({found.length})
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {[...found].reverse().map((w) => (
-          <span
-            key={w.word}
-            style={{
-              background: w.isPangram ? "var(--accent)" : "var(--bg-elev)",
-              color: w.isPangram ? "var(--accent-fg)" : "var(--fg)",
-              padding: "4px 8px",
-              borderRadius: 6,
-              fontSize: 14,
-              textTransform: "uppercase",
-              fontWeight: 600,
-            }}
-          >
-            {w.word}
-            <span style={{ opacity: 0.7, fontSize: 11, marginLeft: 4 }}>+{w.points}</span>
-            {w.firstFinder && <span style={{ marginLeft: 3 }}>★</span>}
-          </span>
-        ))}
-      </div>
+      <WordChips words={[...found].reverse()} />
+    </div>
+  );
+}
+
+function WordChips({ words }: { words: ScoredWord[] }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {words.map((w) => (
+        <span
+          key={w.word}
+          style={{
+            background: w.isPangram ? "var(--accent)" : "var(--bg-elev)",
+            color: w.isPangram ? "var(--accent-fg)" : "var(--fg)",
+            padding: "4px 8px",
+            borderRadius: 6,
+            fontSize: 14,
+            textTransform: "uppercase",
+            fontWeight: 600,
+          }}
+        >
+          {w.word}
+          <span style={{ opacity: 0.7, fontSize: 11, marginLeft: 4 }}>+{w.points}</span>
+          {w.firstFinder && <span style={{ marginLeft: 3 }}>★</span>}
+        </span>
+      ))}
     </div>
   );
 }
@@ -939,7 +945,14 @@ function PlayerRoundResults({
       {state.roundSummary && state.roundSummary.pangrams.length > 0 && (
         <PangramList summary={state.roundSummary} />
       )}
-      <Standings state={state} clientId={clientId} title="Total" />
+      <Standings
+        state={state}
+        clientId={clientId}
+        title="Total"
+        deltas={Object.fromEntries(
+          (state.roundSummary?.perPlayer ?? []).map((r) => [r.playerId, r.scoreThisRound]),
+        )}
+      />
     </main>
   );
 }
@@ -976,10 +989,13 @@ function Standings({
   state,
   clientId,
   title,
+  deltas,
 }: {
   state: PublicGameState;
   clientId: string;
   title: string;
+  // Each player's "+N this round", shown beside their running total.
+  deltas?: Record<string, number>;
 }) {
   const ranked = [...state.players]
     .map((p) => ({ player: p, total: state.totalScores[p.id] ?? 0 }))
@@ -1006,10 +1022,13 @@ function Standings({
             >
               <span style={{ opacity: 0.7, minWidth: 20 }}>#{i + 1}</span>
               <Avatar id={r.player.avatar} size={32} />
-              <span style={{ flex: 1 }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
                 {r.player.name}
                 {isMe && <span style={{ marginLeft: 6, fontSize: 13, opacity: 0.8 }}>(you)</span>}
               </span>
+              {deltas?.[r.player.id] !== undefined && (
+                <span style={{ opacity: 0.75, fontSize: 14 }}>+{deltas[r.player.id]}</span>
+              )}
               <strong>{r.total}</strong>
             </li>
           );
@@ -1050,6 +1069,7 @@ function PlayerFinal({
           clientId={clientId}
         />
         <Standings state={state} clientId={clientId} title="Final standings" />
+        <TopWordsList state={state} clientId={clientId} />
         {isHost ? (
           <button
             onClick={() => send({ type: "playAgain" })}
@@ -1062,6 +1082,43 @@ function PlayerFinal({
         )}
       </main>
     </>
+  );
+}
+
+// Each player's best words for the whole game. Server only populates
+// playerTopWords at FINAL_RESULTS.
+function TopWordsList({ state, clientId }: { state: PublicGameState; clientId: string }) {
+  const rows = [...state.players]
+    .map((p) => ({ player: p, top: state.playerTopWords?.[p.id] ?? [] }))
+    .filter((r) => r.top.length > 0)
+    .sort((a, b) => (b.top[0]?.points ?? 0) - (a.top[0]?.points ?? 0));
+  if (rows.length === 0) return null;
+  return (
+    <section style={{ marginTop: 24 }}>
+      <h2 style={{ fontSize: 20 }}>Best words</h2>
+      <div style={{ display: "grid", gap: 8 }}>
+        {rows.map((r) => (
+          <div
+            key={r.player.id}
+            style={{
+              background: "var(--bg-elev)",
+              border:
+                r.player.id === clientId
+                  ? "2px solid var(--accent)"
+                  : "1px solid var(--border)",
+              borderRadius: 10,
+              padding: "10px 12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <Avatar id={r.player.avatar} size={24} />
+              <span style={{ fontWeight: 700 }}>{r.player.name}</span>
+            </div>
+            <WordChips words={r.top} />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

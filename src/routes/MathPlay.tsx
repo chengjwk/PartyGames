@@ -249,6 +249,7 @@ export default function MathPlay() {
         <RoundResults
           state={state}
           privateState={privateState}
+          clientId={clientId}
           isHost={isHost}
           send={send}
         />
@@ -1520,14 +1521,72 @@ function SolvedStrip({
   );
 }
 
+// Shared scoreboard for the phone's results screens. `deltas` adds each
+// player's "+N this round" next to their running total.
+function Standings({
+  state,
+  clientId,
+  title,
+  deltas,
+}: {
+  state: MathPublicGameState;
+  clientId: string;
+  title: string;
+  deltas?: Record<string, number>;
+}) {
+  const ranked = [...state.players]
+    .map((p) => ({ player: p, total: state.totalScores[p.id] ?? 0 }))
+    .sort((a, b) => b.total - a.total);
+  return (
+    <section style={{ marginTop: 20 }}>
+      <h2 style={{ fontSize: 20 }}>{title}</h2>
+      <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 6 }}>
+        {ranked.map((r, i) => {
+          const isMe = r.player.id === clientId;
+          const delta = deltas?.[r.player.id];
+          return (
+            <li
+              key={r.player.id}
+              style={{
+                background: isMe ? ACCENT : "var(--bg-elev)",
+                color: isMe ? ACCENT_FG : "var(--fg)",
+                padding: "10px 14px",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                fontWeight: isMe ? 700 : 400,
+                opacity: r.player.connected ? 1 : 0.5,
+              }}
+            >
+              <span style={{ opacity: 0.7, minWidth: 20 }}>#{i + 1}</span>
+              <Avatar id={r.player.avatar} size={32} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {r.player.name}
+                {isMe && <span style={{ marginLeft: 6, fontSize: 13, opacity: 0.8 }}>(you)</span>}
+              </span>
+              {delta !== undefined && (
+                <span style={{ opacity: 0.75, fontSize: 14 }}>+{delta}</span>
+              )}
+              <strong>{r.total}</strong>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
 function RoundResults({
   state,
   privateState,
+  clientId,
   isHost,
   send,
 }: {
   state: MathPublicGameState;
   privateState: MathPrivatePlayerState | null;
+  clientId: string;
   isHost: boolean;
   send: (m: MathClientMessage) => void;
 }) {
@@ -1550,6 +1609,14 @@ function RoundResults({
       <SolvedStrip
         solved={privateState?.solved ?? []}
         skipped={privateState?.skipped ?? []}
+      />
+      <Standings
+        state={state}
+        clientId={clientId}
+        title="Total"
+        deltas={Object.fromEntries(
+          (state.roundSummary?.perPlayer ?? []).map((r) => [r.playerId, r.scoreThisRound]),
+        )}
       />
     </main>
   );
@@ -1574,34 +1641,38 @@ function FinalResults({
       <Fireworks />
       <main style={{ padding: "60px 20px 24px" }}>
         <h1 style={{ marginTop: 0 }}>Final Results</h1>
-        <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
-          {ranked.map((r, i) => {
-            const isMe = r.player.id === clientId;
-            return (
-              <li
-                key={r.player.id}
-                style={{
-                  background: isMe ? ACCENT : "var(--bg-elev)",
-                  color: isMe ? ACCENT_FG : "var(--fg)",
-                  padding: "12px 16px",
-                  borderRadius: 8,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  fontWeight: isMe ? 700 : 400,
-                }}
-              >
-                <span style={{ opacity: 0.7, minWidth: 20 }}>#{i + 1}</span>
-                <Avatar id={r.player.avatar} size={32} />
-                <span style={{ flex: 1 }}>
-                  {r.player.name}
-                  {isMe && <span style={{ marginLeft: 6, fontSize: 13, opacity: 0.8 }}>(you)</span>}
-                </span>
-                <strong>{r.total}</strong>
-              </li>
-            );
-          })}
-        </ol>
+        <Standings state={state} clientId={clientId} title="Final standings" />
+        {ranked.some((r) => (state.playerTopSolves?.[r.player.id] ?? []).length > 0) && (
+          <section style={{ marginTop: 20 }}>
+            <h2 style={{ fontSize: 20 }}>Best solves</h2>
+            <div style={{ display: "grid", gap: 8 }}>
+              {ranked.map((r) => {
+                const top = state.playerTopSolves?.[r.player.id] ?? [];
+                if (top.length === 0) return null;
+                return (
+                  <div
+                    key={r.player.id}
+                    style={{
+                      background: "var(--bg-elev)",
+                      border:
+                        r.player.id === clientId
+                          ? `2px solid ${ACCENT}`
+                          : "1px solid var(--border)",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <Avatar id={r.player.avatar} size={24} />
+                      <span style={{ fontWeight: 700 }}>{r.player.name}</span>
+                    </div>
+                    <SolvedStrip solved={top} skipped={[]} />
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
         {isHost ? (
           <button onClick={() => send({ type: "playAgain" })} style={{ fontSize: 20, padding: 16, width: "100%", marginTop: 16, background: ACCENT, color: ACCENT_FG }}>
             Play again
